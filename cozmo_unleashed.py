@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+'''
 # based on Copyright (c) 2016 Anki, Inc.
 # modifications by acidzebra
 #
@@ -30,7 +30,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
-
+'''
 
 #import required functions
 # edit you may need to install some of these libraries
@@ -48,9 +48,10 @@ import numpy as np
 #define globals
 global freeplay
 freeplay=0
-
+'''
 # image annotator for camera
 # not really needed but I like to see what kind of gain/exposure compensation is going on in my environment
+'''
 @cozmo.annotate.annotator
 def camera_info(image, scale, annotator=None, world=None, **kw):
 	d = ImageDraw.Draw(image)
@@ -61,10 +62,6 @@ def camera_info(image, scale, annotator=None, world=None, **kw):
 	text_to_display += 'Gain: %.3f\n' % camera.gain
 	text = cozmo.annotate.ImageText(text_to_display,position=cozmo.annotate.TOP_LEFT,line_spacing=2,color="white",outline_color="black", full_outline=True)
 	text.render(d, bounds)
-
-# def on_object_tapped(robot, evt=None, obj=None, tap_count=None, **kwargs):
-		# print("you tapped a thing")
-		# robot.play_anim_trigger(cozmo.anim.Triggers.HikingReactToEdge, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 
 	
 # main program and loops
@@ -92,7 +89,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	robot.set_robot_volume(0.2)
 	# END OF CONFIGURABLE VARIABLES
 
-	robot.world.connect_to_cubes()
+	#robot.world.connect_to_cubes()
 	#robot.add_event_handler(cozmo.objects.EvtObjectAppeared, handle_object_appeared)
 	#robot.add_event_handler(cozmo.objects.EvtObjectDisappeared, handle_object_disappeared)
 	robot.world.image_annotator.add_annotator('camera_info', camera_info)
@@ -108,25 +105,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	#os.system('cls' if os.name == 'nt' else 'clear')
 	needslevel = 1
 	lowbatcount=0
-	
-	
-	
-	
-	
-	#robot.world.add_event_handler(cozmo.objects.EvtObjectTapped, on_object_tapped)
-	
-	
-	
-	
-	#self.coz.world.add_event_handler(cozmo.objects.EvtObjectTapped, self.on_object_tapped)
-	
 
-	#
-# custom object definitions
-# I printed out the custom object markers and made a little playpen
-# you can use this to somewhat control cozmo
-# but if you don't have them it doesn't matter, the program will run just as well/badly
-#
+
 	wall_obj1 = robot.world.define_custom_wall(CustomObjectTypes.CustomType02, CustomObjectMarkers.Circles2, 340, 120, 44, 44, True)
 	wall_obj2 = robot.world.define_custom_wall(CustomObjectTypes.CustomType03, CustomObjectMarkers.Circles3, 120, 340, 44, 44, True)
 	wall_obj3 = robot.world.define_custom_wall(CustomObjectTypes.CustomType04, CustomObjectMarkers.Circles4, 340, 120, 44, 44, True)
@@ -140,8 +120,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	# set up event monitoring
 	q = None
 	event_monitor.monitor(robot, q)
-# THIS IS WHERE THE STUFF REALLY HAPPENS
-#
+
 
 	while True:
 #
@@ -193,7 +172,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				if i >= playchance:
 					#os.system('cls' if os.name == 'nt' else 'clear')
 					print("State: leaving charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
-					robot.world.connect_to_cubes()
+					#robot.world.connect_to_cubes()
 					robot.set_all_backpack_lights(cozmo.lights.off_light)
 					robot.play_anim("anim_gotosleep_getout_02").wait_for_completed()
 					for _ in range(3):
@@ -265,7 +244,9 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			charger = None
 			# see if we already know where the charger is
 			if robot.world.charger:
-				if robot.world.charger.pose.origin_id == robot.pose.origin_id:
+				if robot.world.charger.pose.is_comparable(robot.pose):
+					print("Cozmo already knows where the charger is!")
+					charger = robot.world.charger
 					#we know where the charger is
 					#os.system('cls' if os.name == 'nt' else 'clear')
 					print("State: charger position known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
@@ -308,16 +289,28 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 					x= random.randrange(-100, 101, 200)
 					y= random.randrange(-100, 101, 200)
+					z= random.randrange(-30, 30, 1)
 					#os.system('cls' if os.name == 'nt' else 'clear')
 					print("State: looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
-					robot.go_to_pose(Pose(x, y, 0, angle_z=degrees(0)), relative_to_robot=True).wait_for_completed()
+					robot.go_to_pose(Pose(x, y, 0, angle_z=degrees(z)), relative_to_robot=True).wait_for_completed()
 					robot.drive_wheels(40, -40, l_wheel_acc=50, r_wheel_acc=50, duration=2)
-					time.sleep(0.5)
+					i = random.randint(1, 100)
+					if i >= 90:
+						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+					else:
+						time.sleep(0.5)
 					robot.drive_wheels(-40, 40, l_wheel_acc=45, r_wheel_acc=45, duration=2)
-					time.sleep(0.7)
+					i = random.randint(1, 100)
+					if i >= 90:
+						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabThinking, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+					else:
+						time.sleep(0.5)
 					robot.drive_wheels(-40, 40, l_wheel_acc=45, r_wheel_acc=45, duration=2)
-					time.sleep(0.5)
-					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabThinking, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
+					i = random.randint(1, 100)
+					if i >= 90:
+						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabThinking, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+					else:
+						time.sleep(0.5)
 					if robot.world.charger:
 						loops=0
 						#os.system('cls' if os.name == 'nt' else 'clear')
@@ -325,7 +318,11 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						print("State: breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 						break
-					time.sleep(0.5)
+					i = random.randint(1, 100)
+					if i >= 70:
+						robot.play_anim_trigger(cozmo.anim.Triggers.HikingInterestingEdgeThought, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+					else:
+						time.sleep(0.5)
 					#robot.play_anim_trigger(cozmo.anim.Triggers.HikingInterestingEdgeThought, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
 					loops=loops-1
 				#os.system('cls' if os.name == 'nt' else 'clear')
@@ -337,7 +334,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 # Charger location and docking handling here
 #
 #TODO: improve this spaghetti code
-			if charger and robot.world.charger:
+			if robot.world.charger:
 				while (robot.is_on_charger == 0):
 					robot.set_lift_height(0.8,0.8,0.8,0.1).wait_for_completed()
 					# drive near to the charger, and then stop.
