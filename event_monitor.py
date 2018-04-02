@@ -9,7 +9,7 @@ https://github.com/touretzkyds/cozmo-tools
 Created by: David S. Touretzky, Carnegie Mellon University
 
 Edited by: GrinningHermit
-More edits by: AcidZebra
+More edits and expanded on by: AcidZebra
 =====
 
 """
@@ -41,7 +41,13 @@ class CheckState (threading.Thread):
 		is_cliff_detected = False
 		is_moving = False
 		is_carrying_block = False
+		is_localized = False
+		is_picking_or_placing = False
+		is_pathing = False
 		while thread_running:
+
+#pickup detection and response
+
 			if robot.is_picked_up:
 				delay = 0
 				if not is_picked_up:
@@ -69,7 +75,9 @@ class CheckState (threading.Thread):
 				#self.q.put(msg)
 			elif delay <= 9:
 				delay += 1
-			
+				
+#block carrying detection
+
 			if robot.is_carrying_block:
 				if not is_carrying_block:
 					is_carrying_block = True
@@ -78,9 +86,24 @@ class CheckState (threading.Thread):
 			elif not robot.is_carrying_block:
 				if is_carrying_block:
 					is_carrying_block = False
-					msg = 'cozmo.robot.Robot.is_carrying_block: True'
+					msg = 'cozmo.robot.Robot.is_carrying_block: False'
 					print(msg)
-			
+
+# localization detection
+
+			if robot.is_localized:
+				if not is_localized:
+					is_localized = True
+					msg = 'cozmo.robot.Robot.is_localized: True'
+					print(msg)
+			elif not robot.is_localized:
+				if is_localized:
+					is_localized = False
+					msg = 'cozmo.robot.Robot.is_localized: False'
+					print(msg)					
+
+# falling detection
+
 			if robot.is_falling:
 				# TODO: need some kind of check here - if we've really fallen we probably need to stop playing until we're put back
 				# TODO: make sad noises while we're waiting
@@ -95,6 +118,8 @@ class CheckState (threading.Thread):
 					msg = 'cozmo.robot.Robot.is_falling: False'
 					print(msg)
 					#self.q.put(msg)
+
+# on charger detection
 
 			if robot.is_on_charger:
 				if not is_on_charger:
@@ -113,8 +138,10 @@ class CheckState (threading.Thread):
 					msg = 'cozmo.robot.Robot.is_on_charger: False'
 					print(msg)
 					#self.q.put(msg)
-			
-			if robot.is_cliff_detected and not robot.is_falling and not robot.is_picked_up:
+
+# cliff detection and response
+
+			if robot.is_cliff_detected and not robot.is_falling and not robot.is_picked_up and not robot.is_pathing:
 				if not is_cliff_detected:
 					is_cliff_detected = True
 					msg = 'cozmo.robot.Robot.is_cliff_detected: True'
@@ -130,16 +157,48 @@ class CheckState (threading.Thread):
 					is_cliff_detected = False
 					msg = 'cozmo.robot.Robot.is_cliff_detected: False'
 					print(msg)
-			
-			if robot.is_moving:
-				if not is_moving:
-					is_moving = True
-					msg = 'cozmo.robot.Robot.is_moving: True'
-					is_moving = False
-			
-			
-			time.sleep(0.1)
 
+# is_picking_or_placing
+			if robot.is_picking_or_placing:
+				if not is_picking_or_placing:
+					is_picking_or_placing = True
+					msg = 'cozmo.robot.Robot.is_picking_or_placing: True'
+					print(msg)
+			elif not robot.is_picking_or_placing:
+				if is_picking_or_placing:
+					is_picking_or_placing = False
+					msg = 'cozmo.robot.Robot.is_picking_or_placing: False'
+					print(msg)		
+				
+# is pathing
+			if robot.is_pathing:
+				if not is_pathing:
+					is_pathing = True
+					msg = 'cozmo.robot.Robot.is_pathing: True'
+					print(msg)
+			elif not robot.is_pathing:
+				if is_pathing:
+					is_pathing = False
+					msg = 'cozmo.robot.Robot.is_pathing: False'
+					print(msg)	
+				
+# movement detection
+# too spammy/unreliable
+
+			# if robot.is_moving:
+				# if not is_moving:
+					# is_moving = True
+					# msg = 'cozmo.robot.Robot.is_moving: True'
+					# print(msg)
+			# elif not robot.is_moving:
+				# if is_moving:
+					# is_moving = False
+					# msg = 'cozmo.robot.Robot.is_moving: False'
+					# print(msg)		
+
+# end of detection loop
+
+			time.sleep(0.1)
 
 def print_prefix(evt):
 	msg = evt.event_name + ' '
