@@ -8,5 +8,7 @@ He will not offer any block-related  games (yet), just do basic stuff like build
 
 As he plays his "needs levels" (internal counters for repair/mood/energy) will go down as his battery levels go down, this in turn will affect his mood and potential actions.
 
-It also contains a basic scheduler that allows you to set allowed play times during weekdays and weekends. Whenever he's in allowed playtime there's a chance he will get off his charger and play.
+It also contains a basic scheduler that allows you to set allowed play times during weekdays and weekends. Whenever he's in allowed playtime there's a chance he will get off his charger and play. The scheduler is disabled by default (see the main cozmo_unleashed file for some variables you can config.
+
+You will need to install some python modules using pip or pip3, notably Pillow and numpy.
 
