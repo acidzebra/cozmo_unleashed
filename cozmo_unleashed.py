@@ -88,7 +88,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	weekendstopplay  = 23
 	# scheduler - when battery is charged this represents the chance cozmo will get off his charger to play
 	# chance is defined as a number between 1-99 with a higher number representing a lesser chance
-	playchance = 50
+	playchance = 1
 	#
 	# low battery voltage - the point where Cozmo will start looking for his charger
 	#
@@ -204,6 +204,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			if playokay==1:
 				i = random.randint(1, 100)
 				# wake up chance
+				if use_scheduler==0:
+					i = 100
 				if i >= playchance:
 					#os.system('cls' if os.name == 'nt' else 'clear')
 					start_time = time.time()
@@ -349,18 +351,24 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.drive_wheels(40, -40, l_wheel_acc=50, r_wheel_acc=50, duration=2)
 					i = random.randint(1, 100)
 					if i >= 90:
+						robot.abort_all_actions(log_abort_messages=False)
+						robot.wait_for_all_actions_completed()
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 					else:
 						time.sleep(0.5)
 					robot.drive_wheels(-40, 40, l_wheel_acc=45, r_wheel_acc=45, duration=2)
 					i = random.randint(1, 100)
 					if i >= 90:
+						robot.abort_all_actions(log_abort_messages=False)
+						robot.wait_for_all_actions_completed()
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabThinking, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 					else:
 						time.sleep(0.5)
 					robot.drive_wheels(-40, 40, l_wheel_acc=45, r_wheel_acc=45, duration=2)
 					i = random.randint(1, 100)
 					if i >= 90:
+						robot.abort_all_actions(log_abort_messages=False)
+						robot.wait_for_all_actions_completed()
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabThinking, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 					else:
 						time.sleep(0.5)
@@ -373,6 +381,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						break
 					i = random.randint(1, 100)
 					if i >= 70:
+						robot.abort_all_actions(log_abort_messages=False)
+						robot.wait_for_all_actions_completed()
 						robot.play_anim_trigger(cozmo.anim.Triggers.HikingInterestingEdgeThought, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 					else:
 						time.sleep(0.5)
@@ -393,6 +403,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					# drive near to the charger, and then stop.
 					#os.system('cls' if os.name == 'nt' else 'clear')
 					print("State:  moving to charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+					robot.abort_all_actions(log_abort_messages=False)
+					robot.wait_for_all_actions_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 					robot.move_lift(-3)
 					robot.set_head_angle(degrees(0)).wait_for_completed()
@@ -554,6 +566,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			i = random.randint(1, 100)
 			if i >= 99:
 				#random action!
+				robot.abort_all_actions(log_abort_messages=False)
 				robot.enable_all_reaction_triggers(False)
 				robot.stop_freeplay_behaviors()
 				robot.abort_all_actions(log_abort_messages=False)
@@ -594,6 +607,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 		i = random.randint(1, 100)
 		if i >= 98:
+			robot.abort_all_actions(log_abort_messages=False)
+			robot.wait_for_all_actions_completed()
 			robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 		print("State:  freeplay state program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 		time.sleep(2)
@@ -609,6 +624,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 	i = random.randint(1, 100)
 	if i >= 90:
+		robot.abort_all_actions(log_abort_messages=False)
+		robot.wait_for_all_actions_completed()
 		robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 	time.sleep(1)
 	print("State:  main program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))

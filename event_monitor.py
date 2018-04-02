@@ -59,6 +59,7 @@ class CheckState (threading.Thread):
 					print(msg)
 					#self.q.put(msg)
 			elif is_picked_up and delay > 9:
+				robot.play_anim_trigger(cozmo.anim.Triggers.VC_HowAreYouDoing_AllGood, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 				robot.enable_all_reaction_triggers(True)
 				robot.start_freeplay_behaviors()
 				is_picked_up = False
@@ -86,11 +87,11 @@ class CheckState (threading.Thread):
 			if robot.is_on_charger:
 				if not is_on_charger:
 					is_on_charger = True
-					robot.abort_all_actions(log_abort_messages=False)
-					robot.enable_all_reaction_triggers(False)
-					robot.stop_freeplay_behaviors()
-					robot.abort_all_actions(log_abort_messages=False)
-					robot.wait_for_all_actions_completed()
+					# robot.abort_all_actions(log_abort_messages=False)
+					# robot.enable_all_reaction_triggers(False)
+					# robot.stop_freeplay_behaviors()
+					# robot.abort_all_actions(log_abort_messages=False)
+					# robot.wait_for_all_actions_completed()
 					msg = 'cozmo.robot.Robot.is_on_charger: True'
 					print(msg)
 					#self.q.put(msg)
@@ -110,8 +111,8 @@ class CheckState (threading.Thread):
 					robot.abort_all_actions(log_abort_messages=False)
 					robot.wait_for_all_actions_completed()
 					time.sleep(1)
-					robot.drive_wheels(-80, -80, l_wheel_acc=45, r_wheel_acc=45, duration=2)
-					robot.drive_wheels(-80, -80, l_wheel_acc=45, r_wheel_acc=45, duration=2)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=3)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=3)
 					#robot.drive_straight(distance_mm(-200), speed_mmps(30)).wait_for_completed()
 					robot.start_freeplay_behaviors()
 					is_cliff_detected = False
