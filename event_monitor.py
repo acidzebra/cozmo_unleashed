@@ -124,6 +124,7 @@ class CheckState (threading.Thread):
 			if robot.is_on_charger:
 				if not is_on_charger:
 					is_on_charger = True
+					# 
 					# robot.abort_all_actions(log_abort_messages=False)
 					# robot.enable_all_reaction_triggers(False)
 					# robot.stop_freeplay_behaviors()
