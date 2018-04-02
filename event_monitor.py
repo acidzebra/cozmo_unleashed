@@ -56,7 +56,7 @@ class CheckState (threading.Thread):
 					robot.stop_freeplay_behaviors()
 					robot.abort_all_actions(log_abort_messages=False)
 					robot.wait_for_all_actions_completed()
-					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
+					#robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedLeft, ignore_body_track=True).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
