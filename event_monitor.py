@@ -40,6 +40,7 @@ class CheckState (threading.Thread):
 		is_on_charger = False
 		is_cliff_detected = False
 		is_moving = False
+		is_carrying_block = False
 		while thread_running:
 			if robot.is_picked_up:
 				delay = 0
@@ -68,6 +69,17 @@ class CheckState (threading.Thread):
 				#self.q.put(msg)
 			elif delay <= 9:
 				delay += 1
+			
+			if robot.is_carrying_block:
+				if not is_carrying_block:
+					is_carrying_block = True
+					msg = 'cozmo.robot.Robot.is_carrying_block: True'
+					print(msg)
+			elif not robot.is_carrying_block:
+				if is_carrying_block:
+					is_carrying_block = False
+					msg = 'cozmo.robot.Robot.is_carrying_block: True'
+					print(msg)
 			
 			if robot.is_falling:
 				# TODO: need some kind of check here - if we've really fallen we probably need to stop playing until we're put back

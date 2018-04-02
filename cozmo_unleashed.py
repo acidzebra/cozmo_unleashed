@@ -564,7 +564,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				# print("dark")
 			# block for random actions
 			i = random.randint(1, 100)
-			if i >= 99:
+			if i >= 99 and not robot.is_carrying_block:
 				#random action!
 				robot.abort_all_actions(log_abort_messages=False)
 				robot.enable_all_reaction_triggers(False)
