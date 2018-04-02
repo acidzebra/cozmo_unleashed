@@ -57,12 +57,12 @@ class CheckState (threading.Thread):
 					robot.abort_all_actions(log_abort_messages=False)
 					robot.wait_for_all_actions_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
-					robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedLeft, ignore_body_track=True).wait_for_completed()
-					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedLeft, ignore_body_track=False).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=False).wait_for_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
 					is_picked_up = True
-					msg = 'cozmo.robot.Robot.is_pickup_up: True'
+					msg = 'state: cozmo.robot.Robot.is_pickup_up: True'
 					print(msg)
 					#self.q.put(msg)
 			elif is_picked_up and delay > 9:
@@ -70,7 +70,7 @@ class CheckState (threading.Thread):
 				robot.enable_all_reaction_triggers(True)
 				robot.start_freeplay_behaviors()
 				is_picked_up = False
-				msg = 'cozmo.robot.Robot.is_pickup_up: False'
+				msg = 'state: cozmo.robot.Robot.is_pickup_up: False'
 				print(msg)
 				#self.q.put(msg)
 			elif delay <= 9:
@@ -81,12 +81,12 @@ class CheckState (threading.Thread):
 			if robot.is_carrying_block:
 				if not is_carrying_block:
 					is_carrying_block = True
-					msg = 'cozmo.robot.Robot.is_carrying_block: True'
+					msg = 'state: cozmo.robot.Robot.is_carrying_block: True'
 					print(msg)
 			elif not robot.is_carrying_block:
 				if is_carrying_block:
 					is_carrying_block = False
-					msg = 'cozmo.robot.Robot.is_carrying_block: False'
+					msg = 'state: cozmo.robot.Robot.is_carrying_block: False'
 					print(msg)
 
 # localization detection
@@ -94,12 +94,12 @@ class CheckState (threading.Thread):
 			if robot.is_localized:
 				if not is_localized:
 					is_localized = True
-					msg = 'cozmo.robot.Robot.is_localized: True'
+					msg = 'state: cozmo.robot.Robot.is_localized: True'
 					print(msg)
 			elif not robot.is_localized:
 				if is_localized:
 					is_localized = False
-					msg = 'cozmo.robot.Robot.is_localized: False'
+					msg = 'state: cozmo.robot.Robot.is_localized: False'
 					print(msg)					
 
 # falling detection
@@ -109,13 +109,13 @@ class CheckState (threading.Thread):
 				# TODO: make sad noises while we're waiting
 				if not is_falling:
 					is_falling = True
-					msg = 'cozmo.robot.Robot.is_falling: True'
+					msg = 'state: cozmo.robot.Robot.is_falling: True'
 					print(msg)
 					#self.q.put(msg)
 			elif not robot.is_falling:
 				if is_falling:
 					is_falling = False
-					msg = 'cozmo.robot.Robot.is_falling: False'
+					msg = 'state: cozmo.robot.Robot.is_falling: False'
 					print(msg)
 					#self.q.put(msg)
 
@@ -130,13 +130,13 @@ class CheckState (threading.Thread):
 					# robot.stop_freeplay_behaviors()
 					# robot.abort_all_actions(log_abort_messages=False)
 					# robot.wait_for_all_actions_completed()
-					msg = 'cozmo.robot.Robot.is_on_charger: True'
+					msg = 'state: cozmo.robot.Robot.is_on_charger: True'
 					print(msg)
 					#self.q.put(msg)
 			elif not robot.is_on_charger:
 				if is_on_charger:
 					is_on_charger = False
-					msg = 'cozmo.robot.Robot.is_on_charger: False'
+					msg = 'state: cozmo.robot.Robot.is_on_charger: False'
 					print(msg)
 					#self.q.put(msg)
 
@@ -145,42 +145,42 @@ class CheckState (threading.Thread):
 			if robot.is_cliff_detected and not robot.is_falling and not robot.is_picked_up and not robot.is_pathing:
 				if not is_cliff_detected:
 					is_cliff_detected = True
-					msg = 'cozmo.robot.Robot.is_cliff_detected: True'
+					msg = 'state: cozmo.robot.Robot.is_cliff_detected: True'
 					print(msg)
 					robot.stop_freeplay_behaviors()
 					robot.abort_all_actions(log_abort_messages=False)
 					robot.wait_for_all_actions_completed()
 					time.sleep(1)
-					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=3)
-					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=3)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.5)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.5)
 					#robot.drive_straight(distance_mm(-200), speed_mmps(30)).wait_for_completed()
 					robot.start_freeplay_behaviors()
 					is_cliff_detected = False
-					msg = 'cozmo.robot.Robot.is_cliff_detected: False'
+					msg = 'state: cozmo.robot.Robot.is_cliff_detected: False'
 					print(msg)
 
 # is_picking_or_placing
 			if robot.is_picking_or_placing:
 				if not is_picking_or_placing:
 					is_picking_or_placing = True
-					msg = 'cozmo.robot.Robot.is_picking_or_placing: True'
+					msg = 'state: cozmo.robot.Robot.is_picking_or_placing: True'
 					print(msg)
 			elif not robot.is_picking_or_placing:
 				if is_picking_or_placing:
 					is_picking_or_placing = False
-					msg = 'cozmo.robot.Robot.is_picking_or_placing: False'
+					msg = 'state: cozmo.robot.Robot.is_picking_or_placing: False'
 					print(msg)		
 				
 # is pathing
 			if robot.is_pathing:
 				if not is_pathing:
 					is_pathing = True
-					msg = 'cozmo.robot.Robot.is_pathing: True'
+					msg = 'state: cozmo.robot.Robot.is_pathing: True'
 					print(msg)
 			elif not robot.is_pathing:
 				if is_pathing:
 					is_pathing = False
-					msg = 'cozmo.robot.Robot.is_pathing: False'
+					msg = 'state: cozmo.robot.Robot.is_pathing: False'
 					print(msg)	
 				
 # movement detection
@@ -189,12 +189,12 @@ class CheckState (threading.Thread):
 			# if robot.is_moving:
 				# if not is_moving:
 					# is_moving = True
-					# msg = 'cozmo.robot.Robot.is_moving: True'
+					# msg = 'state: cozmo.robot.Robot.is_moving: True'
 					# print(msg)
 			# elif not robot.is_moving:
 				# if is_moving:
 					# is_moving = False
-					# msg = 'cozmo.robot.Robot.is_moving: False'
+					# msg = 'state: cozmo.robot.Robot.is_moving: False'
 					# print(msg)		
 
 # end of detection loop
