@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-'''
-# based on Copyright (c) 2016 Anki, Inc.
-# modifications by acidzebra
+
+# 
+# based on basic self docking example copyright (c) 2016 Anki, Inc.
+# modifications and expansion into autonomous pet territory by acidzebra
 #
-# mod 1.0: 2017-10		
+# mod 1.0	
 # -basic messy code		
-# mod 1.1: 2018-02		
+# mod 1.1		
 # - merged some stuff I had kicking around:		
 # - scheduler (not easily configurable, have to look in the code, need to fix)		
 # - set cozmo "needs" all to 1 so he won't be sulky when he plays		
@@ -16,7 +17,16 @@
 # mod 1.2.1:
 # - bugfixes
 # - new bugs
-#
+# mod 1.2.2:
+# - more bugfixes
+# - more amazing bugs introduced
+# - started work on integrating an event monitor to more appropriately react to being picked up/falling, offer games when it sees a face,etc
+# - see https://github.com/acidzebra/cozmo_unleashed
+# - I will not be integrating the event monitor into this script, this is likely the last stand alone version
+# mod 1.2.3:
+# - some more random changes here and there, tinkering with the dockfinder code
+# - added a runtime time which displays how long he's been in freeplay/charging, in minutes
+# - disabled screen clearing to improve troubleshooting
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,14 +40,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # 
-'''
+
 
 #import required functions
 # edit you may need to install some of these libraries
 # specifically Pillow and numpy
 #
 #
-import sys, os, datetime, random, time, math
+import sys, os, datetime, random, time, math, re, threading
 import asyncio, cozmo, cozmo.objects, cozmo.util
 import event_monitor
 from cozmo.util import degrees, distance_mm, speed_mmps, Pose
@@ -48,10 +58,7 @@ import numpy as np
 #define globals
 global freeplay
 freeplay=0
-'''
-# image annotator for camera
-# not really needed but I like to see what kind of gain/exposure compensation is going on in my environment
-'''
+
 @cozmo.annotate.annotator
 def camera_info(image, scale, annotator=None, world=None, **kw):
 	d = ImageDraw.Draw(image)
@@ -66,7 +73,6 @@ def camera_info(image, scale, annotator=None, world=None, **kw):
 	
 # main program and loops
 def cozmo_unleashed(robot: cozmo.robot.Robot):
-
 # CONFIGURABLE VARIABLES HERE
 # CHANGE TO YOUR LIKING
 	#
@@ -81,12 +87,18 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	weekendstopplay  = 23
 	# scheduler - when battery is charged this represents the chance cozmo will get off his charger to play
 	# chance is defined as a number between 1-99 with a higher number representing a lesser chance
-	playchance = 80
+	playchance = 50
 	#
 	# low battery voltage - the point where Cozmo will start looking for his charger
 	#
 	lowbatvoltage = 3.7
 	robot.set_robot_volume(0.2)
+	# 
+	#cozmo will get less happy as his battery decreases. The mood modifier can be used to adjust this
+	# suggested range 3.5-4.5, a lower value will cause him to stay happy longer
+	# the formula is (1 - (moodmodifier - batterylevel))
+	moodmodifier = 4.05
+	#
 	# END OF CONFIGURABLE VARIABLES
 
 	#robot.world.connect_to_cubes()
@@ -97,10 +109,12 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	camera.enable_auto_exposure()
 	#camera.set_manual_exposure(67, camera.config.max_gain)
 	global freeplay
-	#robot.world.disconnect_from_cubes()
+	global start_time
+	robot.world.disconnect_from_cubes()
 	robot.enable_all_reaction_triggers(False)
 	robot.enable_stop_on_cliff(True)
-
+	q = None # dependency on queue variable for messaging instead of printing to event-content directly
+	thread_running = False # starting thread for custom events
 	robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
 	#os.system('cls' if os.name == 'nt' else 'clear')
 	needslevel = 1
@@ -120,18 +134,23 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	# set up event monitoring
 	q = None
 	event_monitor.monitor(robot, q)
-
+	start_time = time.time()
 
 	while True:
 #
 #State 1: on charger, charging
 #
 		if (robot.is_on_charger == 1) and (robot.is_charging == 1):
-			robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
+			needslevel = 1 - (moodmodifier - robot.battery_voltage)
+			if needslevel < 0.1:
+				needslevel = 0.1
+			if needslevel > 1:
+				needslevel = 1
+			robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 			#robot.world.disconnect_from_cubes()
 			lowbatcount=0
 			#os.system('cls' if os.name == 'nt' else 'clear')
-			print("State: charging, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+			print("State:  charging, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 			# once in a while make random snoring noises
 			i = random.randint(1, 100)
 			if i >= 98:
@@ -140,18 +159,30 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			elif i >= 80:
 				robot.play_anim("anim_gotosleep_sleeploop_01").wait_for_completed()
 			else:
-				time.sleep(5)
+				time.sleep(4)
 			time.sleep(5)
-			
-			#TODO: figure out how to smoothly cycle lights
-			robot.set_all_backpack_lights(cozmo.lights.blue_light)
-			time.sleep(5)
-			robot.set_all_backpack_lights(cozmo.lights.off_light)
+			color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			#define 3 lights and set different on/off and transition times
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+			light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+			light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+			#set the backpack lights
+			robot.set_backpack_lights(None, light1, light2, light3, None)
+			time.sleep(4)
 #
 #State 2: on charger, fully charged
 #
 		if (robot.is_on_charger == 1) and (robot.is_charging == 0):
 			lowbatcount=0
+			color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			#define 3 lights and set different on/off and transition times
+			light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+			light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+			#set the backpack lights
+			robot.set_backpack_lights(None, light1, light2, light3, None)
 			robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
 			# day and time check - are we okay to play at this time and day?
 			day_of_week = datetime.date.today().weekday() # 0 is Monday, 6 is Sunday
@@ -171,9 +202,17 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				# wake up chance
 				if i >= playchance:
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: leaving charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					start_time = time.time()
+					print("State:  leaving charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					#robot.world.connect_to_cubes()
-					robot.set_all_backpack_lights(cozmo.lights.off_light)
+					color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+					color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+					#define 3 lights and set different on/off and transition times
+					light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+					light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+					light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+					#set the backpack lights
+					robot.set_backpack_lights(None, light1, light2, light3, None)
 					robot.play_anim("anim_gotosleep_getout_02").wait_for_completed()
 					for _ in range(3):
 						robot.drive_off_charger_contacts().wait_for_completed()
@@ -190,9 +229,11 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			while x < 20 and (robot.is_on_charger == 1):
 				#os.system('cls' if os.name == 'nt' else 'clear')
 				if playokay == 1:
-					print("State: charged, schedule OK but not active, sleep loop %d of 30 before next check." % (x))
+					print("State:  charged, schedule OK but not active, sleep loop %d of 30 before next check." % (x))\
+					time.sleep(1)
 				else:
-					print("State: charged,  not active by schedule, sleep loop %d of 30 before next check." % (x))
+					print("State:  charged,  not active by schedule, sleep loop %d of 30 before next check." % (x))
+					time.sleep(1)
 				i = random.randint(1, 100)
 				if i == 100:
 					robot.play_anim("anim_guarddog_fakeout_02").wait_for_completed()
@@ -204,10 +245,10 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					#robot.play_anim("anim_gotosleep_off_01").wait_for_completed()
 				if (robot.is_on_charger == 0):
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: we were taken off the charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					print("State:  we were taken off the charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					break
 				time.sleep(5)
-				robot.set_all_backpack_lights(cozmo.lights.off_light)
+				#robot.set_all_backpack_lights(cozmo.lights.off_light)
 				x += 1
 #
 #State 3: not on charger, low battery
@@ -221,6 +262,14 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		if lowbatcount > 3 and (robot.is_on_charger == 0):
 			#back off from whatever we were doing
 			if freeplay==1:
+				color1=cozmo.lights.Color(int_color=4278190335, rgb=None, name=None)
+				color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+				#define 3 lights and set different on/off and transition times
+				light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+				light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+				light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+				#set the backpack lights
+				robot.set_backpack_lights(None, light1, light2, light3, None)
 				robot.abort_all_actions(log_abort_messages=False)
 				robot.wait_for_all_actions_completed()
 				robot.stop_freeplay_behaviors()
@@ -231,15 +280,15 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				robot.set_head_angle(degrees(0)).wait_for_completed()
 				robot.move_lift(-3)
 				robot.drive_straight(distance_mm(-30), speed_mmps(50)).wait_for_completed()
-			robot.set_all_backpack_lights(cozmo.lights.blue_light)
-			needslevel = 1 - (4.2 - robot.battery_voltage)
+			#robot.set_all_backpack_lights(cozmo.lights.blue_light)
+			needslevel = 1 - (moodmodifier - robot.battery_voltage)
 			if needslevel < 0.1:
 				needslevel = 0.1
 			if needslevel > 1:
 				needslevel = 1
 			robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 			#os.system('cls' if os.name == 'nt' else 'clear')
-			print("State: finding charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+			print("State:  finding charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 			# charger location search
 			charger = None
 			# see if we already know where the charger is
@@ -249,7 +298,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					charger = robot.world.charger
 					#we know where the charger is
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: charger position known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					print("State:  charger position known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 					robot.move_lift(-3)
 					robot.set_head_angle(degrees(0)).wait_for_completed()
@@ -265,7 +314,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 # to include a check for knowing where the charger is		
 			else:
 				#os.system('cls' if os.name == 'nt' else 'clear')
-				print("State: looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+				print("State:  looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 				robot.play_anim_trigger(cozmo.anim.Triggers.SparkIdle, ignore_body_track=True).wait_for_completed()
 				robot.move_lift(-3)
 				robot.set_head_angle(degrees(0)).wait_for_completed()
@@ -279,9 +328,9 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						charger = robot.world.charger
 						#os.system('cls' if os.name == 'nt' else 'clear')
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
-						print("State: breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						break
-					needslevel = 1 - (4.2 - robot.battery_voltage)
+					needslevel = 1 - (moodmodifier - robot.battery_voltage)
 					if needslevel < 0.1:
 						needslevel = 0.1
 					if needslevel > 1:
@@ -291,7 +340,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					y= random.randrange(-100, 101, 200)
 					z= random.randrange(-30, 30, 1)
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					print("State:  looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					robot.go_to_pose(Pose(x, y, 0, angle_z=degrees(z)), relative_to_robot=True).wait_for_completed()
 					robot.drive_wheels(40, -40, l_wheel_acc=50, r_wheel_acc=50, duration=2)
 					i = random.randint(1, 100)
@@ -315,7 +364,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						loops=0
 						#os.system('cls' if os.name == 'nt' else 'clear')
 						charger = robot.world.charger
-						print("State: breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 						break
 					i = random.randint(1, 100)
@@ -326,7 +375,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					#robot.play_anim_trigger(cozmo.anim.Triggers.HikingInterestingEdgeThought, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
 					loops=loops-1
 				#os.system('cls' if os.name == 'nt' else 'clear')
-				print("State: locator loop complete. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+				print("State:  locator loop complete. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 				time.sleep(1)
 			
 
@@ -339,7 +388,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.set_lift_height(0.8,0.8,0.8,0.1).wait_for_completed()
 					# drive near to the charger, and then stop.
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: moving to charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					print("State:  moving to charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 					robot.move_lift(-3)
 					robot.set_head_angle(degrees(0)).wait_for_completed()
@@ -356,7 +405,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						charger = None
 						robot.play_anim_trigger(cozmo.anim.Triggers.ReactToPokeReaction, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
 						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State: charger not found, clearing map. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  charger not found, clearing map. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						break
 					# okay it's there, attempt to dock.
 					action = robot.go_to_pose(charger.pose)
@@ -366,7 +415,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					if i >= 85:
 						robot.play_anim_trigger(cozmo.anim.Triggers.FeedingReactToShake_Normal, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 					#os.system('cls' if os.name == 'nt' else 'clear')
-					print("State: docking, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+					print("State:  docking, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					robot.turn_in_place(degrees(95)).wait_for_completed()
 					robot.turn_in_place(degrees(95)).wait_for_completed()
 					time.sleep( 1 )
@@ -377,37 +426,46 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					# check if we're now docked
 					if robot.is_on_charger:
 						# Yes! we're docked!
-						robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
+						color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+						color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+						#define 3 lights and set different on/off and transition times
+						light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+						light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+						light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+						#set the backpack lights
+						robot.set_backpack_lights(None, light1, light2, light3, None)
+						start_time = time.time()
 						robot.play_anim("anim_sparking_success_02").wait_for_completed()
 						robot.set_head_angle(degrees(0)).wait_for_completed()
 						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State: docked, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
-						robot.set_all_backpack_lights(cozmo.lights.off_light)
+						print("State:  docked, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+						#robot.set_all_backpack_lights(cozmo.lights.off_light)
 						robot.play_anim("anim_gotosleep_getin_01").wait_for_completed()
 						robot.play_anim("anim_gotosleep_sleeping_01").wait_for_completed()
 					# No, we missed. Back off and try again
 					else:
 						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State: failed to dock with charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  failed to dock with charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						charger = None
 						robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedRight, ignore_body_track=True).wait_for_completed()
 						robot.move_lift(-3)
 						robot.set_head_angle(degrees(0)).wait_for_completed()
 						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State: backing off to attempt docking, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  backing off to attempt docking, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						robot.drive_straight(distance_mm(50), speed_mmps(50)).wait_for_completed()
 						robot.turn_in_place(degrees(-3)).wait_for_completed()
 						robot.drive_straight(distance_mm(150), speed_mmps(50)).wait_for_completed()
 						robot.turn_in_place(degrees(95)).wait_for_completed()
 						robot.turn_in_place(degrees(96)).wait_for_completed()
 						robot.set_head_angle(degrees(0)).wait_for_completed()
+						break
 						if not robot.world.charger:
 						# #No we can't see it. Remove charger from navigation map and quit this loop.
 							robot.world.charger = None
 							charger = None
 							robot.play_anim_trigger(cozmo.anim.Triggers.ReactToPokeReaction, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
 							#os.system('cls' if os.name == 'nt' else 'clear')
-							print("State: charger not found, clearing map. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+							print("State:  charger not found, clearing map. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 							break
 						time.sleep( 1 )
 			else:
@@ -426,13 +484,13 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 							x=20
 							charger = robot.world.charger
 							#os.system('cls' if os.name == 'nt' else 'clear')
-							print("State: breaking freeplay loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+							print("State:  breaking freeplay loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 							break
 						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State: charger not found, falling back to freeplay for a bit, loop %d of 20." % x)
+						print("State:  charger not found, falling back to freeplay for a bit, loop %d of 20." % x)
 					x+=1
 					if robot.world.charger:
-						print("State: charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+						print("State:  charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						charger = robot.world.charger
 					break
 				#after 100 seconds or spotting the charger end freeplay
@@ -440,7 +498,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				robot.stop_freeplay_behaviors()
 				freeplay=0
 			#os.system('cls' if os.name == 'nt' else 'clear')
-			print("State: charger program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+			print("State:  charger program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 			time.sleep(1)
 
 
@@ -451,14 +509,22 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			#lowbatcount == 0
 			#initiate freeplay
 			if freeplay==0:
+				color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+				color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+				#define 3 lights and set different on/off and transition times
+				light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+				light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+				light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+				#set the backpack lights
+				robot.set_backpack_lights(None, light1, light2, light3, None)
 				robot.drive_wheels(40, -40, l_wheel_acc=50, r_wheel_acc=50, duration=2)
 				robot.play_anim_trigger(cozmo.anim.Triggers.OnSpeedtapGameCozmoWinHighIntensity, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=False).wait_for_completed()
 				#os.system('cls' if os.name == 'nt' else 'clear')
-				print("State: freeplay activating, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+				print("State:  freeplay activating, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 				#robot.world.connect_to_cubes()
 				robot.enable_all_reaction_triggers(True)
 				robot.start_freeplay_behaviors()
-				needslevel = 1 - (4.2 - robot.battery_voltage)
+				needslevel = 1 - (moodmodifier - robot.battery_voltage)
 				#clamp values
 				if needslevel < 0.1:
 					needslevel = 0.1
@@ -467,8 +533,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 				freeplay=1
 			#os.system('cls' if os.name == 'nt' else 'clear')
-			print("State: freeplay, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
-			needslevel = 1 - (4.2 - robot.battery_voltage)
+			print("State:  freeplay, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+			needslevel = 1 - (moodmodifier - robot.battery_voltage)
 			#clamp values
 			if needslevel < 0.1:
 				needslevel = 0.1
@@ -480,9 +546,43 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				# print("light")
 			# elif camera.exposure_ms >= 66:
 				# print("dark")
-		
+			# block for random actions
+			i = random.randint(1, 100)
+			if i >= 99:
+				#random action!
+				robot.enable_all_reaction_triggers(False)
+				robot.stop_freeplay_behaviors()
+				robot.abort_all_actions(log_abort_messages=False)
+				robot.wait_for_all_actions_completed()
+				# do another dice roll to see what we do
+				p = random.randint(1, 10)
+				if p == 10:
+					robot.play_anim_trigger(cozmo.anim.Triggers.DanceMambo, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+				elif p ==9:
+					robot.play_anim_trigger(cozmo.anim.Triggers.DroneModeGetOut, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+				elif p ==8:
+					robot.play_anim_trigger(cozmo.anim.Triggers.FistBumpSuccess, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+				elif p ==7:
+					robot.play_anim_trigger(cozmo.anim.Triggers.MajorWin, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+				elif p ==6:
+					robot.play_anim_trigger(cozmo.anim.Triggers.VC_HowAreYouDoing_AllGood, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+				elif p ==5:
+					robot.play_anim_trigger(cozmo.anim.Triggers.VC_Alrighty, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()	
+				elif p ==4:
+					robot.play_anim_trigger(cozmo.anim.Triggers.BouncerRequestToPlay, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()	
+				elif p ==3:
+					robot.play_anim_trigger(cozmo.anim.Triggers.NothingToDoBoredEvent, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()	
+				elif p ==2:
+					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabReactHappy, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()	
+				elif p ==1:
+					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabHappy, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()	
+				robot.wait_for_all_actions_completed()	
+				robot.enable_all_reaction_triggers(True)
+				robot.start_freeplay_behaviors()
+					
+					
 		#os.system('cls' if os.name == 'nt' else 'clear')
-		needslevel = 1 - (4.2 - robot.battery_voltage)
+		needslevel = 1 - (moodmodifier - robot.battery_voltage)
 		if needslevel < 0.1:
 			needslevel = 0.1
 		if needslevel > 1:
@@ -491,13 +591,13 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		i = random.randint(1, 100)
 		if i >= 98:
 			robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
-		print("State: freeplay state program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
+		print("State:  freeplay state program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 		time.sleep(2)
 	#os.system('cls' if os.name == 'nt' else 'clear')
 
 #
 # end of loop
-	needslevel = 1 - (4.2 - robot.battery_voltage)
+	needslevel = 1 - (moodmodifier - robot.battery_voltage)
 	if needslevel < 0.1:
 		needslevel = 0.1
 	if needslevel > 1:
@@ -507,12 +607,15 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	if i >= 90:
 		robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 	time.sleep(1)
-	print("State: main program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2))
-	time.sleep( 3 )
+	print("State:  main program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+	time.sleep( 2 )
 
 	
 cozmo.robot.Robot.drive_off_charger_on_connect = False
 #cozmo.run_program(cozmo_unleashed, use_viewer=True)
 # you may need to install a freeglut library, the cozmo SDK has documentation for this. If you don't have it comment the below line and uncomment the one above.
-cozmo.run_program(cozmo_unleashed, use_viewer=True, use_3d_viewer=True)
+#cozmo.run_program(cozmo_unleashed, use_viewer=True, use_3d_viewer=True)
 # which will give you remote control over Cozmo via WASD+QERF while the 3d window has focus
+#
+# below is just the program running without any camera view or 3d maps
+cozmo.run_program(cozmo_unleashed)

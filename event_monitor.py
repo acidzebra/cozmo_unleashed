@@ -1,113 +1,179 @@
 """
 
-Event Monitor Tool for Cozmo
+Event Monitor for Cozmo
 ============================
 
-Usage:
-	monitor(robot) to monitor all event types in the dispatch table
-	monitor(robot, Event) to monitor a specific type of event
+Based on Event Monitor for cozmo-tools:
+https://github.com/touretzkyds/cozmo-tools
 
-	unmonitor(robot[, Event]) to turn off monitoring
+Created by: David S. Touretzky, Carnegie Mellon University
 
-Author: David S. Touretzky, Carnegie Mellon University
-Modified by acidzebra
+Edited by: GrinningHermit
 =====
-
-ChangeLog
-=========
-
-*   Add event handlers to world instead of to robot.
-		Dave Touretzky
-			- Many events (e.g. face stuff) aren't reliably sent to robot.
-
-*   Renaming and more face support
-		Dave Touretzky
-			- Renamed module to event_monitor
-			- Renamed monitor_on/off to monitor/unmonitor
-			- Added monitor_face to handle face events
-
-*   Created
-		Dave Touretzky
 
 """
 
 import re
-
+import threading
+import time
 import cozmo
+from cozmo.util import degrees, distance_mm, speed_mmps, Pose
+from cozmo.objects import CustomObject, CustomObjectMarkers, CustomObjectTypes
+
+robot = None
+q = None # dependency on queue variable for messaging instead of printing to event-content directly
+thread_running = False # starting thread for custom events
+
+# custom eventlistener for picked-up and falling state, more states could be added
+class CheckState (threading.Thread):
+	def __init__(self, thread_id, name, _q):
+		threading.Thread.__init__(self)
+		self.threadID = thread_id
+		self.name = name
+		self.q = _q
+
+	def run(self):
+		delay = 10
+		is_picked_up = False
+		is_falling = False
+		is_on_charger = False
+		is_cliff_detected = False
+		is_moving = False
+		while thread_running:
+			if robot.is_picked_up:
+				delay = 0
+				if not is_picked_up:
+					is_picked_up = True
+					robot.enable_all_reaction_triggers(False)
+					robot.stop_freeplay_behaviors()
+					robot.abort_all_actions(log_abort_messages=False)
+					robot.wait_for_all_actions_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedLeft, ignore_body_track=True).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
+					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
+					msg = 'cozmo.robot.Robot.is_pickup_up: True'
+					print(msg)
+					#self.q.put(msg)
+			elif is_picked_up and delay > 9:
+				robot.enable_all_reaction_triggers(True)
+				robot.start_freeplay_behaviors()
+				is_picked_up = False
+				msg = 'cozmo.robot.Robot.is_pickup_up: False'
+				print(msg)
+				#self.q.put(msg)
+			elif delay <= 9:
+				delay += 1
+			
+			if robot.is_falling:
+				if not is_falling:
+					is_falling = True
+					msg = 'cozmo.robot.Robot.is_falling: True'
+					print(msg)
+					#self.q.put(msg)
+			elif not robot.is_falling:
+				if is_falling:
+					is_falling = False
+					msg = 'cozmo.robot.Robot.is_falling: False'
+					print(msg)
+					#self.q.put(msg)
+
+			if robot.is_on_charger:
+				if not is_on_charger:
+					is_on_charger = True
+					robot.enable_all_reaction_triggers(False)
+					robot.stop_freeplay_behaviors()
+					robot.abort_all_actions(log_abort_messages=False)
+					robot.wait_for_all_actions_completed()
+					msg = 'cozmo.robot.Robot.is_on_charger: True'
+					print(msg)
+					#self.q.put(msg)
+			elif not robot.is_on_charger:
+				if is_on_charger:
+					is_on_charger = False
+					msg = 'cozmo.robot.Robot.is_on_charger: False'
+					print(msg)
+					#self.q.put(msg)
+			
+			if robot.is_cliff_detected and not robot.is_falling and not robot.is_picked_up:
+				if not is_cliff_detected:
+					is_cliff_detected = True
+					msg = 'cozmo.robot.Robot.is_cliff_detected: True'
+					print(msg)
+					robot.stop_freeplay_behaviors()
+					robot.abort_all_actions(log_abort_messages=False)
+					robot.wait_for_all_actions_completed()
+					time.sleep(1)
+					robot.drive_wheels(-80, -80, l_wheel_acc=45, r_wheel_acc=45, duration=2)
+					robot.drive_wheels(-80, -80, l_wheel_acc=45, r_wheel_acc=45, duration=2)
+					#robot.drive_straight(distance_mm(-200), speed_mmps(30)).wait_for_completed()
+					robot.start_freeplay_behaviors()
+					is_cliff_detected = False
+					msg = 'cozmo.robot.Robot.is_cliff_detected: False'
+					print(msg)
+			
+			if robot.is_moving:
+				if not is_moving:
+					is_moving = True
+					msg = 'cozmo.robot.Robot.is_moving: True'
+					is_moving = False
+			
+			
+			time.sleep(0.1)
 
 
 def print_prefix(evt):
-	robot.world.last_event = evt
-	print('-> ', evt.event_name, ' ', sep='', end='')
-
+	msg = evt.event_name + ' '
+	return msg
 
 def print_object(obj):
 	if isinstance(obj,cozmo.objects.LightCube):
 		cube_id = next(k for k,v in robot.world.light_cubes.items() if v==obj)
-		print('LightCube-',cube_id,sep='',end='')
+		msg = 'LightCube-' + str(cube_id)
 	else:
 		r = re.search('<(\w*)', obj.__repr__())
-		print(r.group(1), end='')
-
+		msg = r.group(1)
+	return msg
 
 def monitor_generic(evt, **kwargs):
-	print_prefix(evt)
+	msg = print_prefix(evt)
 	if 'behavior_type_name' in kwargs:
-		print(kwargs['behavior_type_name'], '', end='')
-		print(' ', end='')
+		msg += kwargs['behavior_type_name'] + ' '
 	if 'obj' in kwargs:
-		print_object(kwargs['obj'])
-		print(' ', end='')
+		msg += print_object(kwargs['obj']) + ' '
 	if 'action' in kwargs:
 		action = kwargs['action']
 		if isinstance(action, cozmo.anim.Animation):
-			print(action.anim_name, '', end='')
+			msg += action.anim_name + ' '
 		elif isinstance(action, cozmo.anim.AnimationTrigger):
-			print(action.trigger.name, '', end='')
-	print(set(kwargs.keys()))
-
+			msg += action.trigger.name + ' '
+	msg += str(set(kwargs.keys()))
+	print(msg)
 
 def monitor_EvtActionCompleted(evt, action, state, failure_code, failure_reason, **kwargs):
-	print_prefix(evt)
-	print_object(action)
+	msg = print_prefix(evt)
+	msg += print_object(action) + ' '
 	if isinstance(action, cozmo.anim.Animation):
-		print('', action.anim_name, end='')
+		msg += action.anim_name
 	elif isinstance(action, cozmo.anim.AnimationTrigger):
-		print('', action.trigger.name, end='')
-	print('',state,end='')
+		msg += action.trigger.name
 	if failure_code is not None:
-		print('',failure_code,failure_reason,end='')
-	print()
-
+		msg += str(failure_code) + failure_reason
+	print(msg)
 
 def monitor_EvtObjectTapped(evt, *, obj, tap_count, tap_duration, tap_intensity, **kwargs):
-	print_prefix(evt)
-	print_object(obj)
-	robot.abort_all_actions(log_abort_messages=False)
-	robot.wait_for_all_actions_completed()
-	robot.play_anim_trigger(cozmo.anim.Triggers.HikingReactToEdge, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
-	print(' count=', tap_count,
-		  ' duration=', tap_duration, ' intensity=', tap_intensity, sep='')
-
-
-def monitor_EvtObjectMovingStarted(evt, *, obj, acceleration, **kwargs):
-	print_prefix(evt)
-	print_object(obj)
-	print(' accleration=', acceleration, sep='')
-
-
-def monitor_EvtObjectMovingStopped(evt, *, obj, move_duration, **kwargs):
-	print_prefix(evt)
-	print_object(obj)
-	print(' move_duration=%3.1f secs' %move_duration)
-
+	msg = print_prefix(evt)
+	msg += print_object(obj)
+	msg += ' count=' + str(tap_count) + ' duration=' + str(tap_duration) + ' intensity=' + str(tap_intensity)
+	print(msg)
 
 def monitor_face(evt, face, **kwargs):
-	print_prefix(evt)
+	msg = print_prefix(evt)
 	name = face.name if face.name is not '' else '[unknown face]'
-	expr = face.expression if face.expression is not None else 'expressionless'
-	kw = set(kwargs.keys()) if len(kwargs) > 0 else '{}'
-	print(name, ' (%s) ' % expr, ' face_id=', face.face_id, '  ', kw, sep='')
+	msg += name + ' face_id=' + str(face.face_id)
+	print(msg)
+
 
 dispatch_table = {
   cozmo.action.EvtActionStarted		: monitor_generic,
@@ -116,10 +182,9 @@ dispatch_table = {
   cozmo.behavior.EvtBehaviorStopped	: monitor_generic,
   cozmo.anim.EvtAnimationsLoaded	   : monitor_generic,
   cozmo.anim.EvtAnimationCompleted	 : monitor_EvtActionCompleted,
+  # cozmo.objects.EvtObjectAvailable	 : monitor_generic, # deprecated
   cozmo.objects.EvtObjectAppeared	  : monitor_generic,
   cozmo.objects.EvtObjectDisappeared   : monitor_generic,
-  cozmo.objects.EvtObjectMovingStarted : monitor_EvtObjectMovingStarted,
-  cozmo.objects.EvtObjectMovingStopped : monitor_EvtObjectMovingStopped,
   cozmo.objects.EvtObjectObserved	  : monitor_generic,
   cozmo.objects.EvtObjectTapped		: monitor_EvtObjectTapped,
   cozmo.faces.EvtFaceAppeared		  : monitor_face,
@@ -132,14 +197,17 @@ excluded_events = {	# Occur too frequently to monitor by default
 	cozmo.faces.EvtFaceObserved,
 }
 
-
-def monitor(_robot, evt_class=None):
+def monitor(_robot, _q, evt_class=None):
 	if not isinstance(_robot, cozmo.robot.Robot):
 		raise TypeError('First argument must be a Robot instance')
 	if evt_class is not None and not issubclass(evt_class, cozmo.event.Event):
 		raise TypeError('Second argument must be an Event subclass')
 	global robot
+	global q
+	global thread_running
 	robot = _robot
+	q = _q
+	thread_running = True
 	if evt_class in dispatch_table:
 		robot.world.add_event_handler(evt_class,dispatch_table[evt_class])
 	elif evt_class is not None:
@@ -148,6 +216,8 @@ def monitor(_robot, evt_class=None):
 		for k,v in dispatch_table.items():
 			if k not in excluded_events:
 				robot.world.add_event_handler(k,v)
+	thread_is_state_changed = CheckState(1, 'ThreadCheckState', q)
+	thread_is_state_changed.start()
 
 
 def unmonitor(_robot, evt_class=None):
@@ -156,7 +226,10 @@ def unmonitor(_robot, evt_class=None):
 	if evt_class is not None and not issubclass(evt_class, cozmo.event.Event):
 		raise TypeError('Second argument must be an Event subclass')
 	global robot
+	global thread_running
 	robot = _robot
+	thread_running = False
+
 	try:
 		if evt_class in dispatch_table:
 			robot.world.remove_event_handler(evt_class,dispatch_table[evt_class])
@@ -168,3 +241,27 @@ def unmonitor(_robot, evt_class=None):
 	except Exception:
 		pass
 
+
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
