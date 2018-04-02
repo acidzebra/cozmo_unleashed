@@ -44,7 +44,7 @@ class CheckState (threading.Thread):
 			if robot.is_picked_up:
 				delay = 0
 				if not is_picked_up:
-					is_picked_up = True
+					robot.abort_all_actions(log_abort_messages=False)
 					robot.enable_all_reaction_triggers(False)
 					robot.stop_freeplay_behaviors()
 					robot.abort_all_actions(log_abort_messages=False)
@@ -52,8 +52,9 @@ class CheckState (threading.Thread):
 					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.AskToBeRightedLeft, ignore_body_track=True).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=True).wait_for_completed()
-					robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
-					robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
+					#robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
+					#robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
+					is_picked_up = True
 					msg = 'cozmo.robot.Robot.is_pickup_up: True'
 					print(msg)
 					#self.q.put(msg)
@@ -68,6 +69,8 @@ class CheckState (threading.Thread):
 				delay += 1
 			
 			if robot.is_falling:
+				# TODO: need some kind of check here - if we've really fallen we probably need to stop playing until we're put back
+				# TODO: make sad noises while we're waiting
 				if not is_falling:
 					is_falling = True
 					msg = 'cozmo.robot.Robot.is_falling: True'
@@ -83,6 +86,7 @@ class CheckState (threading.Thread):
 			if robot.is_on_charger:
 				if not is_on_charger:
 					is_on_charger = True
+					robot.abort_all_actions(log_abort_messages=False)
 					robot.enable_all_reaction_triggers(False)
 					robot.stop_freeplay_behaviors()
 					robot.abort_all_actions(log_abort_messages=False)
@@ -167,12 +171,17 @@ def monitor_EvtObjectTapped(evt, *, obj, tap_count, tap_duration, tap_intensity,
 	msg = print_prefix(evt)
 	msg += print_object(obj)
 	msg += ' count=' + str(tap_count) + ' duration=' + str(tap_duration) + ' intensity=' + str(tap_intensity)
+	#
+	# TODO: expand on this to include some kind of interaction when tapping blocks
+	# TODO: buy new batteries first :) 
 	print(msg)
 
 def monitor_face(evt, face, **kwargs):
 	msg = print_prefix(evt)
 	name = face.name if face.name is not '' else '[unknown face]'
 	msg += name + ' face_id=' + str(face.face_id)
+	# TODO: expand on this to include some kind of interaction when observing a face
+	# TODO: roll dice, stop freeplay if it's a win, then do some stuff like offering a game or just saying hi, then go back to freeplay
 	print(msg)
 
 
@@ -181,6 +190,8 @@ dispatch_table = {
   cozmo.action.EvtActionCompleted	  : monitor_EvtActionCompleted,
   cozmo.behavior.EvtBehaviorStarted	: monitor_generic,
   cozmo.behavior.EvtBehaviorStopped	: monitor_generic,
+  cozmo.behavior.EvtBehaviorRequested	: monitor_generic,
+  #cozmo.behavior.Behavior	: monitor_generic,
   cozmo.anim.EvtAnimationsLoaded	   : monitor_generic,
   cozmo.anim.EvtAnimationCompleted	 : monitor_EvtActionCompleted,
   # cozmo.objects.EvtObjectAvailable	 : monitor_generic, # deprecated
