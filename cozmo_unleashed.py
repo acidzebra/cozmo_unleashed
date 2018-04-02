@@ -397,7 +397,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 # Charger location and docking handling here
 #
 #TODO: improve this spaghetti code
-			if robot.world.charger:
+			if robot.world.charger.pose.is_comparable(robot.pose):
 				while (robot.is_on_charger == 0):
 					robot.set_lift_height(0.8,0.8,0.8,0.1).wait_for_completed()
 					# drive near to the charger, and then stop.
