@@ -10,5 +10,5 @@ As he plays his "needs levels" (internal counters for repair/mood/energy) will g
 
 It also contains a basic scheduler that allows you to set allowed play times during weekdays and weekends. Whenever he's in allowed playtime there's a chance he will get off his charger and play. The scheduler is disabled by default (see the main cozmo_unleashed file for some variables you can config.
 
-You will need to install some python modules using pip or pip3, notably Pillow and numpy.
+To run this script you will need to install some python modules using pip or pip3, notably Pillow and numpy.
 
