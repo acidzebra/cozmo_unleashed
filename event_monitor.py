@@ -64,6 +64,8 @@ class CheckState (threading.Thread):
 					time.sleep(0.5)
 					if robot.is_cliff_detected:
 						robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
+					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
 					#robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
 					is_picked_up = True
