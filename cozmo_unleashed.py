@@ -54,11 +54,11 @@ from cozmo.util import degrees, distance_mm, speed_mmps, Pose
 from cozmo.objects import CustomObject, CustomObjectMarkers, CustomObjectTypes
 from PIL import ImageDraw, ImageFont
 import numpy as np
-
+global robot
 #define globals
 global freeplay
 freeplay=0
-
+robot = cozmo.robot.Robot
 @cozmo.annotate.annotator
 def camera_info(image, scale, annotator=None, world=None, **kw):
 	d = ImageDraw.Draw(image)
@@ -70,7 +70,6 @@ def camera_info(image, scale, annotator=None, world=None, **kw):
 	text = cozmo.annotate.ImageText(text_to_display,position=cozmo.annotate.TOP_LEFT,line_spacing=2,color="white",outline_color="black", full_outline=True)
 	text.render(d, bounds)
 
-	
 # main program and loops
 def cozmo_unleashed(robot: cozmo.robot.Robot):
 # CONFIGURABLE VARIABLES HERE
@@ -111,6 +110,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	#camera.set_manual_exposure(67, camera.config.max_gain)
 	global freeplay
 	global start_time
+	global needslevel
 	robot.world.disconnect_from_cubes()
 	robot.enable_all_reaction_triggers(False)
 	robot.enable_stop_on_cliff(True)
@@ -127,10 +127,10 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	wall_obj3 = robot.world.define_custom_wall(CustomObjectTypes.CustomType04, CustomObjectMarkers.Circles4, 340, 120, 44, 44, True)
 	wall_obj4 = robot.world.define_custom_wall(CustomObjectTypes.CustomType05, CustomObjectMarkers.Circles5, 340, 120, 44, 44, True)
 	wall_obj5 = robot.world.define_custom_wall(CustomObjectTypes.CustomType06, CustomObjectMarkers.Hexagons2, 120, 340, 44, 44, True)
-	homing = robot.world.define_custom_cube(CustomObjectTypes.CustomType07, CustomObjectMarkers.Diamonds2, 5, 44, 44, is_unique=True)
-	wall_obj6=robot.world.define_custom_wall(CustomObjectTypes.CustomType08,CustomObjectMarkers.Hexagons3,120,340,44,44,True)
-	wall_obj7=robot.world.define_custom_wall(CustomObjectTypes.CustomType09,CustomObjectMarkers.Triangles2,340,120,44,44,True)
-	wall_obj8=robot.world.define_custom_wall(CustomObjectTypes.CustomType10,CustomObjectMarkers.Triangles3,340,120,44,44,True)
+	wall_obj6 = robot.world.define_custom_cube(CustomObjectTypes.CustomType07, CustomObjectMarkers.Diamonds2, 5, 44, 44, is_unique=True)
+	wall_obj7 = robot.world.define_custom_wall(CustomObjectTypes.CustomType08,CustomObjectMarkers.Hexagons3,120,340,44,44,True)
+	wall_obj8 = robot.world.define_custom_wall(CustomObjectTypes.CustomType09,CustomObjectMarkers.Triangles2,340,120,44,44,True)
+	wall_obj9 = robot.world.define_custom_wall(CustomObjectTypes.CustomType10,CustomObjectMarkers.Triangles3,340,120,44,44,True)
 	
 	# set up event monitoring
 	q = None
@@ -558,11 +558,20 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				needslevel = 1
 			robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 			time.sleep(2)
+			#
+			# I used this during testing with various lighting conditions
+			# left in as a reminder
+			#
 			# if camera.exposure_ms < 66:
 				# print("light")
 			# elif camera.exposure_ms >= 66:
 				# print("dark")
+			#
+			#
 			# block for random actions
+			# roll a 1d100 and if it's a 100 we do a random thing, provided we are not already doing something else
+			#
+			#
 			i = random.randint(1, 100)
 			if i >= 99 and not robot.is_carrying_block and not robot.is_picking_or_placing and not robot.is_pathing:
 				#random action!
@@ -610,7 +619,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			robot.abort_all_actions(log_abort_messages=False)
 			robot.wait_for_all_actions_completed()
 			robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
-		print("State:  freeplay state program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+		print("State:  cozmo_unleashed state program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 		time.sleep(2)
 	#os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -628,7 +637,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		robot.wait_for_all_actions_completed()
 		robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabChatty, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 	time.sleep(1)
-	print("State:  main program loop complete, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+	print("State:  main program loop complete, we should not be here, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 	time.sleep( 2 )
 
 	
