@@ -12,3 +12,6 @@ It also contains a basic scheduler that allows you to set allowed play times dur
 
 To run this script you will need to install some python modules using pip or pip3, notably Pillow and numpy.
 
+You will obviously also need the awesome little robot Cozmo made by Anki:
+https://www.anki.com/en-us/cozmo
+and the latest version of the Cozmo SDK and IOS/Android app.
