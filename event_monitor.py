@@ -63,11 +63,16 @@ class CheckState (threading.Thread):
 						robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=False).wait_for_completed()
 					time.sleep(0.5)
 					if robot.is_cliff_detected:
+						robot.set_lift_height(1,1,1,0.1).wait_for_completed()
 						robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
-					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
-					robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
+					if robot.is_cliff_detected:
+						robot.set_lift_height(1,1,1,0.1).wait_for_completed()
+						robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
+						robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.0)
+						robot.play_anim_trigger(cozmo.anim.Triggers.TurtleRoll, ignore_body_track=False).wait_for_completed()
 					#robot.play_anim_trigger(cozmo.anim.Triggers.FlipDownFromBack, ignore_body_track=True).wait_for_completed()
-					#robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
+					if robot.is_cliff_detected:
+						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabUnhappy, ignore_body_track=True).wait_for_completed()
 					is_picked_up = True
 					msg = 'state: cozmo.robot.Robot.is_pickup_up: True'
 					print(msg)
@@ -165,6 +170,10 @@ class CheckState (threading.Thread):
 					is_cliff_detected = False
 					msg = 'state: cozmo.robot.Robot.is_cliff_detected: False'
 					print(msg)
+			elif not robot.is_cliff_detected:
+				if is_cliff_detected:
+					is_cliff_detected = False
+					robot.start_freeplay_behaviors()
 
 # is_picking_or_placing
 			if robot.is_picking_or_placing:
@@ -259,10 +268,19 @@ def monitor_EvtObjectTapped(evt, *, obj, tap_count, tap_duration, tap_intensity,
 def monitor_face(evt, face, **kwargs):
 	msg = print_prefix(evt)
 	name = face.name if face.name is not '' else '[unknown face]'
-	msg += name + ' face_id=' + str(face.face_id)
+	expression = face.expression if face.expression is not '' else '[unknown expression]'
+	msg += name + ' face_id=' + str(face.face_id) + ' looking ' + str(face.expression)
 	# TODO: expand on this to include some kind of interaction when observing a face
 	# TODO: roll dice, stop freeplay if it's a win, then do some stuff like offering a game or just saying hi, then go back to freeplay
+	
 	print(msg)
+	#if not robot.is_on_charger:
+	#	if not face.name:
+	#		time.sleep(1)
+	#		robot.abort_all_actions(log_abort_messages=False)
+	#		robot.wait_for_all_actions_completed()
+	#		robot.play_anim_trigger(cozmo.anim.Triggers.VC_HowAreYouDoing_AllGood, ignore_body_track=False, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
+
 
 
 dispatch_table = {
