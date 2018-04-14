@@ -315,10 +315,12 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					# get a little distance and have a look
 					robot.drive_straight(distance_mm(-50), speed_mmps(50)).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.HikingReactToEdge, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
+				else:
+					pass
 # here is a charger location finder but it should be broken out into its own section	
 # I should modify if lowbatcount > 5 and (robot.battery_voltage <= lowbatvoltage) and (robot.is_on_charger == 0):
 # to include a check for knowing where the charger is		
-			else:
+			if not charger:
 				#os.system('cls' if os.name == 'nt' else 'clear')
 				print("State:  looking for charger, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 				robot.play_anim_trigger(cozmo.anim.Triggers.SparkIdle, ignore_body_track=True).wait_for_completed()
@@ -397,8 +399,8 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 # Charger location and docking handling here
 #
 #TODO: improve this spaghetti code
-			if robot.world.charger:
-				while (robot.is_on_charger == 0):
+			if charger:
+				if robot.world.charger.pose.is_comparable(robot.pose):
 					robot.set_lift_height(0.8,0.8,0.8,0.1).wait_for_completed()
 					# drive near to the charger, and then stop.
 					#os.system('cls' if os.name == 'nt' else 'clear')
