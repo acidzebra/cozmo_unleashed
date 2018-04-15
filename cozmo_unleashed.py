@@ -107,6 +107,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	robot.world.image_annotator.add_annotator('camera_info', camera_info)
 	camera = robot.camera
 	camera.enable_auto_exposure()
+	robot.enable_facial_expression_estimation(enable=True)
 	#camera.set_manual_exposure(67, camera.config.max_gain)
 	global freeplay
 	global start_time
