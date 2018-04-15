@@ -91,7 +91,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	#
 	# low battery voltage - the point where Cozmo will start looking for his charger
 	#
-	lowbatvoltage = 5
+	lowbatvoltage = 3.7
 	robot.set_robot_volume(0.2)
 	# 
 	#cozmo will get less happy as his battery decreases. The mood modifier can be used to adjust this
