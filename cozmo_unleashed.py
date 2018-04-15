@@ -263,6 +263,12 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		# basic 'trigger guard' so Cozmo doesn't go to charger immediately if the voltage happens to dip below 3.7
 		if (robot.battery_voltage <= lowbatvoltage) and (robot.is_on_charger == 0):
 			lowbatcount += 1
+			print("State: battery low detected %s time(s)" % lowbatcount,", battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
+			i = random.randint(1, 100)
+			if i >= 98:
+				robot.abort_all_actions(log_abort_messages=False)
+				robot.wait_for_all_actions_completed()
+				robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabTakaTaka, ignore_body_track=True, ignore_head_track=False).wait_for_completed()
 			time.sleep(1)
 		
 		if lowbatcount > 3 and (robot.is_on_charger == 0):
@@ -316,6 +322,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.drive_straight(distance_mm(-50), speed_mmps(50)).wait_for_completed()
 					robot.play_anim_trigger(cozmo.anim.Triggers.HikingReactToEdge, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
 				else:
+					print("State:  charger not in expected location, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 					pass
 # here is a charger location finder but it should be broken out into its own section	
 # I should modify if lowbatcount > 5 and (robot.battery_voltage <= lowbatvoltage) and (robot.is_on_charger == 0):
@@ -347,7 +354,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.set_needs_levels(repair_value=needslevel, energy_value=needslevel, play_value=needslevel)
 					x= random.randrange(-100, 101, 100)
 					y= random.randrange(-100, 101, 100)
-					z= random.randrange(-60, 60, 1)
+					z= random.randrange(-60, 60, 30)
 					a= random.randrange(20, 50, 1)
 					t= random.randrange(1, 3, 1)
 					#os.system('cls' if os.name == 'nt' else 'clear')
@@ -355,7 +362,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.go_to_pose(Pose(x, y, 0, angle_z=degrees(z)), relative_to_robot=True).wait_for_completed()
 					x= random.randrange(-100, 101, 100)
 					y= random.randrange(-100, 101, 100)
-					z= random.randrange(-60, 60, 1)
+					z= random.randrange(-60, 60, 30)
 					a= random.randrange(20, 50, 1)
 					t= random.randrange(1, 3, 1)
 					#os.system('cls' if os.name == 'nt' else 'clear')
@@ -394,7 +401,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						#os.system('cls' if os.name == 'nt' else 'clear')
 						charger = robot.world.charger
 						print("State:  breaking charger loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
-						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=True).wait_for_completed()
+						robot.play_anim_trigger(cozmo.anim.Triggers.CodeLabSurprise, ignore_body_track=True, ignore_head_track=False).wait_for_completed()
 						break
 					i = random.randint(1, 100)
 					if i >= 70:
@@ -491,7 +498,6 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 						robot.turn_in_place(degrees(95)).wait_for_completed()
 						robot.turn_in_place(degrees(96)).wait_for_completed()
 						robot.set_head_angle(degrees(0)).wait_for_completed()
-						break
 						if not robot.world.charger:
 						# #No we can't see it. Remove charger from navigation map and quit this loop.
 							robot.world.charger = None
@@ -504,31 +510,46 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			else:
 			# we have not managed to find the charger. Falling back to freeplay with occasional checks
 				#robot.world.charger = None
-				robot.play_anim_trigger(cozmo.anim.Triggers.MemoryMatchPlayerWinGame, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=False).wait_for_completed()
+				# express frustration
+				robot.play_anim_trigger(cozmo.anim.Triggers.MemoryMatchPlayerWinGame, ignore_body_track=True, ignore_head_track=False, ignore_lift_track=False).wait_for_completed()
 				#robot.world.connect_to_cubes()
-				robot.enable_all_reaction_triggers(True)
-				robot.start_freeplay_behaviors()
-				freeplay=1
+				#robot.enable_all_reaction_triggers(True)
+				#robot.start_freeplay_behaviors()
+				#freeplay=1
 				x=0
-				while x<20:
+				while x<21:
+					if freeplay==0:
+						freeplay = 1
+						color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+						color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+						#define 3 lights and set different on/off and transition times
+						light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=2000, off_period_ms=1000, transition_on_period_ms=1500, transition_off_period_ms=500)
+						light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=2000)
+						light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=2000, transition_on_period_ms=500, transition_off_period_ms=1500)
+						#set the backpack lights
+						robot.set_backpack_lights(None, light1, light2, light3, None)
+						#robot.world.connect_to_cubes()
+						robot.enable_all_reaction_triggers(True)
+						robot.start_freeplay_behaviors()
 					if not robot.world.charger:
 						print("State:  charger not found, temporary freeplay. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
-						time.sleep( 5 )
+						charger = None
+						time.sleep( 2 )
 						if robot.world.charger:
 							if robot.world.charger.pose.is_comparable(robot.pose):
 								x=20
+								freeplay = 0
 								charger = robot.world.charger
 								#os.system('cls' if os.name == 'nt' else 'clear')
 								print("State:  breaking freeplay loop as charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 								break
-						#os.system('cls' if os.name == 'nt' else 'clear')
-						print("State:  charger not found, falling back to freeplay for a bit, loop %d of 20." % x)
 					time.sleep(5)
+					print("State:  charger not found, falling back to freeplay for a bit, loop %d of 20." % x)
 					x+=1
 					if charger:
 						print("State:  charger is known, battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 						charger = robot.world.charger
-					break
+						break
 				#after 100 seconds or spotting the charger end freeplay
 				robot.enable_all_reaction_triggers(False)
 				robot.stop_freeplay_behaviors()
