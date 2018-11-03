@@ -10,7 +10,7 @@
 # AUTOMATIC DOCK FINDING AND DOCKING
 # this is highly reliant on a number of factors, including having enough ambient light, how big the area Cozmo has to explore is,
 # and just sheer blind luck sometimes. The built-in camera of Cozmo is not very high rez, and the dock icon is a little small.
-# 
+# You can improve this in several ways - better lights, custom printed large battery icon (and some fiddling with the docking routing)
 #
 # The surface Cozmo moves on can be more slippery or less than my environment, this will impact things like docking.
 # On my table's surface, I do two 95 degree turns, this makes it so Cozmo has a high rate of successful dockings.
@@ -78,13 +78,19 @@ global msg
 global start_time
 global use_cubes
 global charger
+global maxbatvoltage
 global highbatvoltage
 global lowbatvoltage
+global batlightcounter
 global use_scheduler
 global camera
 global foundcharger
+global lightstate
+global robotvolume
+
 # initialize needed variables
 freeplay = 0
+lightstate = 0
 robot = cozmo.robot.Robot
 
 
@@ -96,13 +102,29 @@ thread_running = False # starting thread for custom events
 #============================
 # CONFIGURABLE VARIABLES HERE
 #============================
+#
+# BATTERY THRESHOLDS
+#
 # low battery voltage - when voltage drops below this Cozmo will start looking for his charger
+# high battery voltage - when cozmo comes off your charger fully charge, this value will self-calibrate
+# maxbatvoltage - the maximum battery level as recorded when cozmo is on charger but no longer charging
 # tweak this to suit your cozmo
 lowbatvoltage = 3.7
 highbatvoltage=4.14
+maxbatvoltage = 4.7
+#
+# CUBE USAGE
+#
 # whether or not to activate the cubes (saves battery if you don't)
 # I almost always leave this off, he will still stack them and mess around with them
+# some games like "block guard dog" will not come up unless the blocks are active
 use_cubes = 1
+#
+# COZMO VOLUME 
+# what volume Cozmo should play sounds at, value between 0 and 1
+robotvolume = 0.2
+#
+# SCHEDULER USAGE
 #
 # whether or not to use the schedule to define allowed "play times"
 # this code is a bit rough, use at your own risk
@@ -134,11 +156,13 @@ def camera_info(image, scale, annotator=None, world=None, **kw):
 #
 def cozmo_unleashed(robot: cozmo.robot.Robot):
 	os.system('cls' if os.name == 'nt' else 'clear')
-	global cozmostate,freeplay,start_time,needslevel,scheduler_playokay,use_cubes, charger, lowbatvoltage, highbatvoltage, use_scheduler,msg, camera, foundcharger, tempfreeplay
+	global cozmostate,freeplay,start_time,needslevel,scheduler_playokay,use_cubes, charger, batlightcounter, lowbatvoltage, highbatvoltage, maxbatvoltage, use_scheduler,msg,objmsg,facemsg,camera, foundcharger, tempfreeplay
 	#robot.world.charger = None
 	#charger = None
 	foundcharger = 0
-	robot.set_robot_volume(0.2)
+	robot.set_robot_volume(robotvolume)
+	robot.enable_freeplay_cube_lights(enable=True)
+	robot.enable_device_imu(enable_raw=False, enable_user=True, enable_gyro=True)
 	# set up some camera stuff
 	robot.world.image_annotator.add_annotator('camera_info', camera_info)
 	camera = robot.camera
@@ -156,7 +180,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	needslevel = 1
 	tempfreeplay = 0
 	lowbatcount=0
-	
+	batlightcounter=0
 	cozmostate = 0
 	#some custom objects that I printed out and use as virtual walls, if you don't have them don't worry about it, it won't affect the program
 	wall_obj1 = robot.world.define_custom_wall(CustomObjectTypes.CustomType01, CustomObjectMarkers.Circles2,  340, 120, 44, 44, True)
@@ -187,7 +211,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				cozmostate = 1
 				start_time = time.time()
 				foundcharger = 0
-				robot_set_backpacklights(65535)  # 65535 is blue
+				#robot_set_backpacklights(65535)  # 65535 is blue
 				if robot.is_freeplay_mode_active:
 					robot.enable_all_reaction_triggers(False)
 					robot.stop_freeplay_behaviors()
@@ -207,15 +231,18 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 #State 2: on charger, fully charged
 #
 		if (robot.is_on_charger == 1) and (robot.is_charging == 0):
-			robot_print_current_state('state 2 conditions met')
+			robot_print_current_state('state 2 conditions met, sleeping 30 secs')
+			time.sleep(30)
 			if cozmostate != 2:  # 2 is fully charged
+				maxbatvoltage = robot.battery_voltage
 				robot_print_current_state('switching to state 2')
 				cozmostate = 2
 				lowbatcount=0
 				foundcharger = 0
 				if use_cubes == 1:
 					robot.world.connect_to_cubes()
-				robot_set_backpacklights(16711935)  # 16711935 is green
+				#robot_set_backpacklights(16711935)  # 16711935 is green
+				#robot_set_backpacklights(65535)  # 65535 is blue
 			robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
 			##robot_set_needslevel()
 			robot_print_current_state('fully charged')
@@ -237,7 +264,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				robot.world.disconnect_from_cubes()
 			robot_set_needslevel()
 			robot_print_current_state('switching to state 5')
-			robot_set_backpacklights(4278190335)  # 4278190335 is red
+			#robot_set_backpacklights(4278190335)  # 4278190335 is red
 			cozmostate = 5
 #			
 #State 4: not on charger, good battery - freeplay active
@@ -247,7 +274,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			if cozmostate != 4: # 4 is freeplay
 				cozmostate = 4
 				robot_print_current_state('switching to state 4')
-				robot_set_backpacklights(16711935)  # 16711935 is green
+				#robot_set_backpacklights(16711935)  # 16711935 is green
 				#initiate freeplay
 				if freeplay == 0:
 					freeplay = 1
@@ -299,8 +326,16 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			#robot.wait_for_all_actions_completed()
 			freeplay = 0
 			##robot_set_needslevel()
-			robot_start_docking()
-
+			if robot.world.charger:
+				try:
+					robot_start_docking()
+				except:
+					robot_print_current_state('error: in dock mode but no dock')
+					cozmostate = 5
+					pass
+			else:
+				robot_print_current_state('error: in dock mode but no dock')
+				cozmostate = 5
 #
 # state 9: we're on our side or are currently picked up
 #
@@ -321,6 +356,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.stop_freeplay_behaviors()
 					freeplay = 0
 				robot.abort_all_actions(log_abort_messages=True)
+				robot.clear_idle_animation()
 				#robot.wait_for_all_actions_completed()
 				robot_reaction_chance(cozmo.anim.Triggers.AskToBeRightedLeft,1,False,False,False)
 				robot_print_current_state('picked annoyed response 1')
@@ -388,6 +424,181 @@ def robot_flash_backpacklights(color):
 	light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=250, off_period_ms=500, transition_on_period_ms=125, transition_off_period_ms=375)
 	robot.set_backpack_lights(None, light1, light2, light3, None)	
 
+def robot_backbackbatteryindicator():
+	global robot,highbatvoltage,lowbatvoltage,maxbatvoltage,lightstate,batlightcounter
+	batmultiplier = ((highbatvoltage - lowbatvoltage)/3)+0.1
+	chargebatmultiplier = ((maxbatvoltage - lowbatvoltage)/3)+0.1
+	critbatmultiplier = ((lowbatvoltage - 3.5)/3)
+	robotvoltage=(robot.battery_voltage)
+	if not lightstate:
+		lightstate = 0
+	oldlightstate = lightstate
+	if robotvoltage > (highbatvoltage-batmultiplier) and cozmostate==4:
+		# bottom two lights on, third light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=1 and lightstate !=2:
+			lightstate = 1
+			color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1)
+			light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage > (highbatvoltage-(batmultiplier*1.5)) and robotvoltage <= (highbatvoltage-batmultiplier) and cozmostate==4:
+		#bottom one light on, second light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=2 and lightstate !=3:
+			lightstate = 2
+			color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage > (highbatvoltage-(batmultiplier*2.5)) and robotvoltage <= (highbatvoltage-(batmultiplier*1.5)) and cozmostate==4:
+		# # bottom one light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=3:
+			lightstate = 3
+			color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light2=cozmo.lights.Light(on_color=color2)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= lowbatvoltage and cozmostate==4:
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=4:
+			lightstate = 4
+			color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=500, off_period_ms=500, transition_on_period_ms=500, transition_off_period_ms=500)
+			light2=cozmo.lights.Light(on_color=color2)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	#robot_set_backpacklights(65535)  # 65535 is blue
+	elif robotvoltage >= (maxbatvoltage-(chargebatmultiplier/2.5)) and robotvoltage <= (maxbatvoltage-(chargebatmultiplier/3.5)) and cozmostate==1:
+		# # bottom one light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=7 and lightstate !=6:
+			lightstate = 7
+			color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light2=cozmo.lights.Light(on_color=color2)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= (maxbatvoltage-(chargebatmultiplier/1.0)) and robotvoltage <= (maxbatvoltage-chargebatmultiplier/2.5) and cozmostate==1:
+		#bottom one light on, second light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=6 and lightstate !=5:
+			lightstate = 6
+			color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= maxbatvoltage and cozmostate==1:
+		# bottom two lights on, third light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=5:
+			lightstate = 5
+			color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1)
+			light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	# elif robotvoltage >= maxbatvoltage and cozmostate==1:
+		# batlightcounter +=1
+		# if batlightcounter > 30 and lightstate !=8:
+			# lightstate = 8
+			# color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+			# color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			# light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=500, off_period_ms=500, transition_on_period_ms=500, transition_off_period_ms=500)
+			# light2=cozmo.lights.Light(on_color=color2)
+			# light3=cozmo.lights.Light(on_color=color2)
+			# robot.set_backpack_lights(None, light3, light2, light1, None)
+			# batlightcounter = 0
+		# pass
+	#robot_set_backpacklights(4278190335)  # 4278190335 is red
+	elif robotvoltage >= (lowbatvoltage-critbatmultiplier) and cozmostate==5:
+		# bottom two lights on, third light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=9:
+			lightstate = 9
+			color1=cozmo.lights.Color(int_color=4278190335, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1)
+			light3=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= (lowbatvoltage-(critbatmultiplier*1.5)) and robotvoltage <= (lowbatvoltage-critbatmultiplier) and cozmostate==5:
+		#bottom one light on, second light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=10  and lightstate !=9:
+			lightstate = 10
+			color1=cozmo.lights.Color(int_color=4278190335, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1)
+			light2=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= (lowbatvoltage-(critbatmultiplier*2.5)) and robotvoltage <= (lowbatvoltage-(critbatmultiplier*1.5)) and cozmostate==5:
+		# # bottom one light blinking
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=11  and lightstate !=10:
+			lightstate = 11
+			color1=cozmo.lights.Color(int_color=4278190335, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=1000, off_period_ms=1000, transition_on_period_ms=1000, transition_off_period_ms=1000)
+			light2=cozmo.lights.Light(on_color=color2)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	elif robotvoltage >= lowbatvoltage and cozmostate==5:
+		batlightcounter +=1
+		if batlightcounter > 30 and lightstate !=12:
+			lightstate = 12
+			color1=cozmo.lights.Color(int_color=4278190335, rgb=None, name=None)
+			color2=cozmo.lights.Color(int_color=0, rgb=None, name=None)
+			light1=cozmo.lights.Light(on_color=color1, off_color=color2, on_period_ms=500, off_period_ms=500, transition_on_period_ms=500, transition_off_period_ms=500)
+			light2=cozmo.lights.Light(on_color=color2)
+			light3=cozmo.lights.Light(on_color=color2)
+			robot.set_backpack_lights(None, light3, light2, light1, None)
+			batlightcounter = 0
+		pass
+	if lightstate==0:
+		lightstate=99
+		if robot.is_on_charger:
+			robot_set_backpacklights(65535)  # 16711935 is green
+		else:
+			if robot.battery_voltage > lowbatvoltage:
+				robot_set_backpacklights(16711935)  # 65535 is blue
+			else :
+				robot_set_backpacklights(4278190335)  # 4278190335 is red
+		
+	
 def robot_set_needslevel():
 	global robot, needslevel, msg
 	needslevel = 1 - (4.05 - robot.battery_voltage)
@@ -404,24 +615,8 @@ def robot_check_sleep_snoring():
 	global robot
 	i = random.randint(1, 1000)
 	if i >= 995:
-		robot_print_current_state('playing big snore')
-		try:
-			robot.play_anim("anim_guarddog_fakeout_02").wait_for_completed()
-		except:
-			robot_print_current_state('big snore anim failed')
-			pass
-		try:
-			robot.play_anim("anim_gotosleep_sleeploop_01").wait_for_completed()
-		except:
-			robot_print_current_state('small snore anim failed')
-			pass
-	elif i >= 985:
-			robot_print_current_state('playing small snore')
-			try:
-				robot.play_anim("anim_gotosleep_sleeploop_01").wait_for_completed()
-			except:
-				robot_print_current_state('small snore anim failed')
-				pass
+		#robot.play_anim_trigger(Sleeping).wait_for_completed()
+		robot_reaction_chance(cozmo.anim.Triggers.Sleeping,1,True,False,False)
 	else:
 		#robot_print_current_state('check complete - no snore')
 		time.sleep(0.5)
@@ -436,6 +631,7 @@ def robot_check_randomreaction():
 			robot.enable_all_reaction_triggers(False)
 			robot.stop_freeplay_behaviors()
 		robot.abort_all_actions(log_abort_messages=True)
+		robot.clear_idle_animation()
 		#robot.wait_for_all_actions_completed()
 		# grab a list of animation triggers
 		all_animation_triggers = robot.anim_triggers
@@ -447,7 +643,23 @@ def robot_check_randomreaction():
 		print('Playing {} random animations:'.format(triggers))
 		for trigger in chosen_triggers:
 			if 'Onboarding' in trigger:
-				trigger = 'SparkSuccess'
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'MeetCozmo' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'trigger' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'Severe' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'TakaTaka' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'Test' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'Loop' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'Sleep' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
+			if 'Request' in trigger:
+				trigger = 'cozmo.anim.Triggers.SparkSuccess'
 			print("trigger %s" %str(trigger)," executed")
 			robot_print_current_state('playing random animation')
 			try:
@@ -547,25 +759,10 @@ def robot_check_scheduler():
 			break
 		time.sleep(2)
 
-def robot_print_current_state(currentstate):
-	global robot,needslevel,start_time,cozmostate,msg, highbatvoltage
-	##robot_set_needslevel()
-	os.system('cls' if os.name == 'nt' else 'clear')
-	#msg=robot.current_behavior
-	print("State          : %s" %currentstate)
-	print("Internal state : %s"% cozmostate)
-	print("High Battery   : %s" % str(round(highbatvoltage, 2))) 
-	print("Battery        : %s" % str(round(robot.battery_voltage, 2)))
-	print("Energy         : %s" % round(needslevel, 2))
-	print("Runtime        : %s" % round(((time.time() - start_time)/60),2))
-	#print("Cubes connected: %s" % robot.world.World.active_behavior.connected_light_cubes)
-	print("Event message  : %s" %msg)
-	#print("State: %s" %currentstate,"battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2)," internal state %s"% cozmostate," last message: %s" %msg)
-	
 def robot_reaction_chance(animation,chance,ignorebody,ignorehead,ignorelift):
 	global robot, msg, freeplay
 	i = random.randint(1, 100)
-	if i >= chance:
+	if i >= chance and not robot.is_behavior_running:
 		robot_print_current_state('starting animation')
 		oldfreeplay = 0
 		if freeplay == 1:
@@ -577,6 +774,7 @@ def robot_reaction_chance(animation,chance,ignorebody,ignorehead,ignorelift):
 			freeplay = 0
 		robot.abort_all_actions(log_abort_messages=True)
 		robot_print_current_state('action queue aborted')
+		robot.clear_idle_animation()
 		#robot.wait_for_all_actions_completed()
 		try:
 			robot.play_anim_trigger(animation, ignore_body_track=ignorebody, ignore_head_track=ignorehead, ignore_lift_track=ignorelift).wait_for_completed()
@@ -612,13 +810,14 @@ def robot_reaction_chance(animation,chance,ignorebody,ignorehead,ignorelift):
 def robot_locate_dock():
 	global cozmostate,freeplay,start_time,needslevel,scheduler_playokay,use_cubes, charger, lowbatvoltage, use_scheduler,msg, camera, foundcharger, tempfreeplay
 	#back off from whatever we were doing
-	robot_set_backpacklights(4278190335)  # 4278190335 is red
+	#robot_set_backpacklights(4278190335)  # 4278190335 is red
 	if robot.is_freeplay_mode_active:
 		robot_print_current_state('disabling freeplay')
 		robot.stop_freeplay_behaviors()
 	robot.enable_all_reaction_triggers(True)
 	robot.abort_all_actions(log_abort_messages=True)
 	robot_print_current_state('all actions aborted')
+	robot.clear_idle_animation()
 	#robot.wait_for_all_actions_completed()
 	if use_cubes==1:
 		robot.world.disconnect_from_cubes()
@@ -711,11 +910,12 @@ def robot_start_docking():
 			charger = None
 			robot.world.charger = None
 			cozmostate=5
+			robot.play_anim_trigger(cozmo.anim.Triggers.ReactToPokeReaction, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
 			break
 			# # we can't see it. Remove charger from navigation map and quit this loop.
 			# robot.world.charger = None
 			# charger = None
-			# robot.play_anim_trigger(cozmo.anim.Triggers.ReactToPokeReaction, ignore_body_track=True, ignore_head_track=True, ignore_lift_track=True).wait_for_completed()
+			
 			# #os.system('cls' if os.name == 'nt' else 'clear')
 			# print("State:  charger not found, clearing map. battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2))
 			#cozmostate = 5
@@ -738,8 +938,8 @@ def robot_start_docking():
 			pass
 		robot_reaction_chance(cozmo.anim.Triggers.FeedingReactToShake_Normal,85,True,False,False)
 		robot_print_current_state('docking')
-		robot.turn_in_place(degrees(95)).wait_for_completed()
-		robot.turn_in_place(degrees(95)).wait_for_completed()
+		robot.turn_in_place(degrees(94)).wait_for_completed()
+		robot.turn_in_place(degrees(94)).wait_for_completed()
 		time.sleep(0.5)
 		robot_reaction_chance(cozmo.anim.Triggers.CubePounceFake,1,True,False,False)
 		robot.drive_straight(distance_mm(-145), speed_mmps(150)).wait_for_completed()
@@ -747,7 +947,7 @@ def robot_start_docking():
 		# check if we're now docked
 		if robot.is_on_charger:
 			# Yes! we're docked!
-			cozmostate = 1
+			#cozmostate = 1
 			# robot_set_backpacklights(65535) # blue
 			# try:
 				# robot.play_anim("anim_sparking_success_02").wait_for_completed()
@@ -799,24 +999,26 @@ def robot_start_docking():
 			except:
 				pass
 			try:
-				robot.turn_in_place(degrees(95)).wait_for_completed()
+				robot.turn_in_place(degrees(94)).wait_for_completed()
 			except:
 				pass
 			try:
 				robot.set_head_angle(degrees(0)).wait_for_completed()
 			except:
 				pass
-		charger= None
-		robot.world.charger=None
-		cozmostate=5
 		time.sleep(0.5)
 		dockloop+=1
+	charger= None
+	robot.world.charger=None
+	cozmostate=5
 	# express frustration
 	try:
 		robot.drive_straight(distance_mm(50), speed_mmps(50)).wait_for_completed()
 	except:
 		pass
 	try:
+	#
+	#
 		robot.turn_in_place(degrees(-3)).wait_for_completed()
 	except:
 		pass
@@ -832,7 +1034,7 @@ def robot_start_docking():
 		if freeplay==0:
 			freeplay = 1
 			robot_print_current_state('charger not found, falling back to freeplay')
-			robot_set_backpacklights(16711935) # green
+			#robot_set_backpacklights(16711935) # green
 			if use_cubes==1:
 				robot.world.connect_to_cubes()
 			if not robot.is_freeplay_mode_active:
@@ -859,7 +1061,7 @@ def robot_start_docking():
 		robot.stop_freeplay_behaviors()
 	if use_cubes==1:
 		robot.world.disconnect_from_cubes()
-	robot_set_backpacklights(4278190335) # red
+	#robot_set_backpacklights(4278190335) # red
 	freeplay = 0
 	cozmostate = 5
 	#os.system('cls' if os.name == 'nt' else 'clear')
@@ -889,7 +1091,7 @@ def robot_drive_random_pattern():
 				y=150
 			else:
 				y=-150
-			z= random.randrange(-40, 41, 1)
+			z= random.randrange(-40, 41, 80)
 			robot_print_current_state('looking for charger, going to random pose')
 			try:
 				robot.go_to_pose(Pose(x, y, 0, angle_z=degrees(z)), relative_to_robot=True).wait_for_completed()
@@ -902,14 +1104,14 @@ def robot_drive_random_pattern():
 				pass
 			if cozmostate == 6:
 				break
-			# if robot.world.charger and robot.world.charger.pose.is_comparable(robot.pose):
-				# loops=0
-				# charger = robot.world.charger
-				# cozmostate = 6
-				# foundcharger = 1
-				# robot_print_current_state('found charger, breaking')
-				# robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
-				# break
+			if robot.world.charger and robot.world.charger.pose.is_comparable(robot.pose):
+				loops=0
+				charger = robot.world.charger
+				cozmostate = 6
+				foundcharger = 1
+				robot_print_current_state('found charger, breaking')
+				robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
+				break
 			# else:
 			robot_check_randomreaction()
 			counter+=1
@@ -920,9 +1122,9 @@ def robot_drive_random_pattern():
 			a= random.randrange(8, 17, 8)
 			t= random.randrange(2, 4, 1)
 			if random.choice((True, False)):
-				rx=40
+				rx=50
 			else:
-				rx=-40
+				rx=-50
 			ry=-rx
 			robot_print_current_state('looking for charger, rotating')
 			try:
@@ -937,26 +1139,26 @@ def robot_drive_random_pattern():
 				pass
 			if cozmostate == 6:
 				break
-			# if robot.world.charger and robot.world.charger.pose.is_comparable(robot.pose):
-				# loops=0
-				# charger = robot.world.charger
-				# robot_print_current_state('found charger')
-				# foundcharger = 1
-				# robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
-				# break
+			if robot.world.charger and robot.world.charger.pose.is_comparable(robot.pose):
+				loops=0
+				charger = robot.world.charger
+				robot_print_current_state('found charger')
+				foundcharger = 1
+				robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
+				break
 			# else:
 			robot_check_randomreaction()
 			counter+=1
 		
-		# if charger:
-			# loops=0
-			# charger = robot.world.charger
-			# cozmostate = 6
-			# foundcharger = 1
-			# robot_print_current_state('found charger')
-			# robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
-			# break
-		##robot_set_needslevel()
+		if robot.world.charger and robot.world.charger.pose.is_comparable(robot.pose):
+			loops=0
+			charger = robot.world.charger
+			cozmostate = 6
+			foundcharger = 1
+			robot_print_current_state('found charger')
+			robot_reaction_chance(cozmo.anim.Triggers.CodeLabSurprise,1,True,False,False)
+			break
+		#robot_set_needslevel()
 		robot_print_current_state('looking for charger, looping through random poses')
 		loops=loops-1
 	robot_print_current_state('looking for charger, broke out of drive loop')
@@ -971,7 +1173,7 @@ def robot_drive_random_pattern():
 # EVENT MONITOR FUNCTIONS
 #
 class CheckState (threading.Thread):
-	global robot,cozmostate,freeplay,msg,camera
+	global robot,cozmostate,freeplay,msg,camera,objmsg,facemsg
 	def __init__(self, thread_id, name, _q):
 		threading.Thread.__init__(self)
 		self.threadID = thread_id
@@ -980,7 +1182,7 @@ class CheckState (threading.Thread):
 
 # main thread
 	def run(self):
-		global robot,cozmostate,freeplay,msg,camera,highbatvoltage,lowbatvoltage
+		global robot,cozmostate,freeplay,msg,camera,highbatvoltage,lowbatvoltage,lightstate
 		delay = 10
 		is_picked_up = False
 		is_falling = False
@@ -1003,8 +1205,10 @@ class CheckState (threading.Thread):
 					robot_flash_backpacklights(4278190335)  # 4278190335 is red
 					robot_print_current_state('cozmo.robot.Robot.is_pickup_up: True')
 					cozmostate = 9
+					lightstate=0
 			elif is_picked_up and delay > 9:
 				cozmostate = 0
+				lightstate=0
 				is_picked_up = False
 				robot_print_current_state('cozmo.robot.Robot.is_pickup_up: False')
 			elif delay <= 9:
@@ -1039,6 +1243,7 @@ class CheckState (threading.Thread):
 					is_falling = True
 					robot_print_current_state('cozmo.robot.Robot.is_falling: True')	
 					cozmostate = 9
+					lightstate=0
 			elif not robot.is_falling:
 				if is_falling:
 					is_falling = False
@@ -1054,18 +1259,27 @@ class CheckState (threading.Thread):
 						robot.enable_all_reaction_triggers(False)
 						robot.stop_freeplay_behaviors()
 					robot.abort_all_actions(log_abort_messages=True)
-					#robot.wait_for_all_actions_completed()
+					robot.wait_for_all_actions_completed()
+					robot.clear_idle_animation()
+					robot.stop_all_motors()
 					msg = 'cozmo.robot.Robot.is_on_charger: True'
+					color1=cozmo.lights.Color(int_color=65535, rgb=None, name=None)
+					light1=cozmo.lights.Light(on_color=color1)
+					light2=cozmo.lights.Light(on_color=color1)
+					light3=cozmo.lights.Light(on_color=color1)
+					robot.set_backpack_lights(None, light3, light2, light1, None)
 					# robot_set_backpacklights(65535)  # 65535 is blue
+					lightstate = 0
 					# #robot.play_anim_trigger(cozmo.anim.Triggers.Sleeping, loop_count=1, in_parallel=True, num_retries=0, ignore_body_track=True, ignore_head_track=False, ignore_lift_track=True).wait_for_completed()
 					# try:
 						# robot.play_anim_trigger(cozmo.anim.Triggers.GoToSleepGetIn).wait_for_completed()
 					# except:
 						# pass
-					robot_set_backpacklights(65535) # blue
-					if cozmostate==1:
+					#robot_set_backpacklights(65535) # blue
+					if cozmostate==6:
 						try:
-							robot.play_anim("anim_sparking_success_02").wait_for_completed()
+							#robot.play_anim("anim_sparking_success_02").wait_for_completed()
+							robot_reaction_chance(cozmo.anim.Triggers.SparkSuccess,1,True,False,False)
 						except:
 							pass
 						try:
@@ -1074,11 +1288,13 @@ class CheckState (threading.Thread):
 							pass
 						robot_print_current_state('docked')
 					try:
-						robot.play_anim("anim_gotosleep_getin_01").wait_for_completed()
+						#robot.play_anim("anim_gotosleep_getin_01").wait_for_completed()
+						robot_reaction_chance(cozmo.anim.Triggers.GoToSleepGetIn,1,True,False,False)
 					except:
 						pass
 					try:
-						play_anim("anim_gotosleep_sleeping_01").wait_for_completed()
+						robot_reaction_chance(cozmo.anim.Triggers.CodeLabSleep,1,True,False,False)
+						#robot.play_anim("anim_gotosleep_sleeping_01").wait_for_completed()
 					except:
 						pass
 					
@@ -1088,11 +1304,16 @@ class CheckState (threading.Thread):
 					#robot_print_current_state('charging')
 				else:
 					cozmostate = 2
+					maxbatvoltage = robot.battery_voltage
 					robot_print_current_state('not charging')
 					#print(msg)
 			elif not robot.is_on_charger:
 				if is_on_charger:
-					robot_set_backpacklights(16711935)  # 16711935 is green
+					#robot_set_backpacklights(16711935)  # 16711935 is green
+					color1=cozmo.lights.Color(int_color=16711935, rgb=None, name=None)
+					light1=cozmo.lights.Light(on_color=color1)
+					light2=cozmo.lights.Light(on_color=color1)
+					light3=cozmo.lights.Light(on_color=color1)
 					is_on_charger = False
 					cozmostate = 4
 					msg = 'cozmo.robot.Robot.is_on_charger: False'
@@ -1112,10 +1333,11 @@ class CheckState (threading.Thread):
 						freeplay = 0
 						wasinfreeplay = 1
 						if robot.is_freeplay_mode_active:
-							robot.enable_all_reaction_triggers(False)
+							#robot.enable_all_reaction_triggers(False)
 							robot.stop_freeplay_behaviors()
 						#robot.wait_for_all_actions_completed()
 					robot.abort_all_actions(log_abort_messages=True)
+					robot.clear_idle_animation()
 					try:
 						robot.drive_wheels(-40, -40, l_wheel_acc=30, r_wheel_acc=30, duration=1.5)
 					except:
@@ -1135,7 +1357,7 @@ class CheckState (threading.Thread):
 						freeplay = 1
 						wasinfreeplay = 0
 						if robot.is_freeplay_mode_active:
-							robot.enable_all_reaction_triggers(True)
+							#robot.enable_all_reaction_triggers(True)
 							robot.start_freeplay_behaviors()
 
 # event monitor: robot is picking or placing something
@@ -1202,7 +1424,7 @@ def print_object(obj):
 	return msg
 
 def monitor_generic(evt, **kwargs):
-	global robot,cozmostate,freeplay,msg,camera
+	global robot,cozmostate,freeplay,msg,camera,objmsg,facemsg
 	msg = print_prefix(evt)
 	if 'behavior' in kwargs or 'behavior_type_name' in kwargs:
 		msg += kwargs['behavior_type_name'] + ' '
@@ -1261,16 +1483,17 @@ def monitor_EvtObjectTapped(evt, *, obj, tap_count, tap_duration, tap_intensity,
 	msg = print_prefix(evt)
 	msg += print_object(obj)
 	msg += ' count=' + str(tap_count) + ' duration=' + str(tap_duration) + ' intensity=' + str(tap_intensity)
-	print(msg)
-	print(obj)
+	#print(msg)
+	#print(obj)
 	#robot_print_current_state('object tapped')
-	if str(obj) == "LightCube-1":
-		print("cube1")
-		#self.cube.set_lights(cozmo.lights.white_light.flash())
-	if str(obj)  == "LightCube-2":
-		print("cube1")
-	if str(obj)  == "LightCube-3":
-		print("cube1")
+	# if str(obj) == "LightCube-1":
+		# print("cube1")
+		# #self.cube.set_lights(cozmo.lights.white_light.flash())
+	# if str(obj)  == "LightCube-2":
+		# print("cube1")
+	# if str(obj)  == "LightCube-3":
+		# print("cube1")
+	robot_print_current_state('object tapped')
 #
 # event monitor: a face was detected
 #
@@ -1307,7 +1530,7 @@ def monitor_EvtObjectMovingStopped(evt, *, obj, move_duration, **kwargs):
 # event monitor: an object appeared in our vision
 #
 def monitor_EvtObjectAppeared(evt, **kwargs):
-	global cozmostate,freeplay,start_time,needslevel,scheduler_playokay,use_cubes, charger, lowbatvoltage, use_scheduler,msg, camera, foundcharger
+	global cozmostate,freeplay,start_time,needslevel,scheduler_playokay,use_cubes, charger, lowbatvoltage, use_scheduler,msg, camera, foundcharger,bhvmsg,facemsg,objmsg
 	msg = print_prefix(evt)
 	msg += print_object(kwargs['obj']) + ' '
 	if print_object(kwargs['obj']) == "Charger":
@@ -1331,6 +1554,8 @@ dispatch_table = {
   cozmo.objects.EvtObjectTapped        : monitor_EvtObjectTapped,
   cozmo.objects.EvtObjectMovingStarted : monitor_EvtObjectMovingStarted,
   cozmo.objects.EvtObjectMovingStopped : monitor_EvtObjectMovingStopped,
+  cozmo.objects.EvtObjectAppeared      : monitor_EvtObjectAppeared,
+  cozmo.objects.EvtObjectDisappeared   : monitor_generic,
   cozmo.faces.EvtFaceAppeared          : monitor_face,
   cozmo.faces.EvtFaceObserved          : monitor_face,
   cozmo.faces.EvtFaceDisappeared       : monitor_face,
@@ -1338,16 +1563,19 @@ dispatch_table = {
   cozmo.action.EvtActionCompleted      : monitor_EvtActionCompleted,
   cozmo.behavior.EvtBehaviorStarted    : monitor_generic,
   cozmo.behavior.EvtBehaviorStopped    : monitor_generic,
+  cozmo.behavior.EvtBehaviorRequested  : monitor_generic,
   cozmo.anim.EvtAnimationsLoaded       : monitor_generic,
   cozmo.anim.EvtAnimationCompleted     : monitor_generic,
 }
 
+# cozmo.objects.EvtObjectObserved,
+	# cozmo.faces.EvtFaceObserved,
+	# cozmo.objects.EvtObjectAppeared,
+	# cozmo.objects.EvtObjectDisappeared,
+	
 excluded_events = {	# Occur too frequently to monitor by default
-	cozmo.objects.EvtObjectObserved,
-	cozmo.faces.EvtFaceObserved,
-	cozmo.objects.EvtObjectAppeared,
-	cozmo.objects.EvtObjectDisappeared,
-	cozmo.behavior.EvtBehaviorRequested,
+	
+	# cozmo.behavior.EvtBehaviorRequested,
 }
 
 def monitor(_robot, _q, evt_class=None):
@@ -1392,6 +1620,37 @@ def unmonitor(_robot, evt_class=None):
 				robot.world.remove_event_handler(k,v)
 	except Exception:
 		pass
+		
+def robot_print_current_state(currentstate):
+	global robot,needslevel,start_time,cozmostate,msg,highbatvoltage,maxbatvoltage,objmsg,facemsg,bhvmsg,lightstate,batlightcounter
+	robot_backbackbatteryindicator()
+	##robot_set_needslevel()
+	os.system('cls' if os.name == 'nt' else 'clear')
+	#print("cozmo sees     : %s"  % str(robot.world.connected_light_cubes))
+	#print("wheelie        : %s" % str(robot.PopAWheelie))
+	#print("Cubes connected: %s" % robot.world.World.active_behavior.connected_light_cubes)
+	#print("Behavior       : %s" % str(cozmo.behavior.Behavior))
+	print("State          : %s" %currentstate)
+	print("Internal state : %s"% cozmostate)
+	print("Max Battery    : %s" % str(round(maxbatvoltage, 2)))
+	print("Max off charger: %s" % str(round(highbatvoltage, 2))) 
+	print("Battery        : %s" % str(round(robot.battery_voltage, 2)))
+	print("Energy         : %s" % round(needslevel, 2))
+	print("Runtime        : %s" % round(((time.time() - start_time)/60),2))
+	print("running behav  : %s" % str(robot.is_behavior_running))
+	print("animating      : %s" % str(robot.is_animating))
+	print("idle anim      : %s" % str(robot.is_animating_idle))
+	print("actions        : %s" % str(robot.has_in_progress_actions))
+	print("Lightstate     : %s" %lightstate)
+	print("Event log      : %s" %msg)
+	# print("Object log     : %s" %objmsg)
+	# print("Face log       : %s" %facemsg)
+	# print("Behavior log   : %s" %bhvmsg)
+	
+	
+	
+	#print("State: %s" %currentstate,"battery %s" % str(round(robot.battery_voltage, 2))," energy %s" % round(needslevel, 2)," runtime %s" % round(((time.time() - start_time)/60),2)," internal state %s"% cozmostate," last message: %s" %msg)
+	
 #
 # END OF EVENT MONITOR FUNCTIONS
 #
