@@ -1,5 +1,7 @@
 # cozmo_unleashed
 
+### NOTE THIS REWRITE RELIES ON CUSTOM PRINTED MARKERS FOR BETTER CHARGER FINDING ###
+### THIS IS MY PERSONAL VERSION AND LIKELY USELESS TO YOU ###
 Attempting to create a perpetuum cozmobile
 
 This is a script to turn cozmo into an autonomous desk toy. He will play until his battery runs low, then attempt to find and dock with his charger. If he succeeds he will wait until fully charged, then come out to play again.
