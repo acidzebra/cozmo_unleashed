@@ -120,7 +120,7 @@ thread_running = False # starting thread for custom events
 # high battery voltage - when cozmo comes off your charger fully charge, this value will self-calibrate
 # maxbatvoltage - the maximum battery level as recorded when cozmo is on charger but no longer charging
 # tweak this to suit your cozmo
-lowbatvoltage = 4.7
+lowbatvoltage = 3.7
 highbatvoltage= 4.14
 maxbatvoltage = 4.8
 #
@@ -216,6 +216,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 	q = None
 	monitor(robot, q)
 	start_time = time.time()
+	msg = 'initialization complete'
 	robot_print_current_state('entering main loop')
 # ENTERING STATE LOOP
 	while True:
@@ -238,6 +239,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 					robot.world.disconnect_from_cubes()
 			lowbatcount=0
 			cozmostate = 1
+			msg = 'state 1 checkpoint'
 			robot_print_current_state('state 1 - charging')
 			# once in a while make random snoring noises
 			robot_check_sleep_snoring()
@@ -256,6 +258,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 				foundcharger = 0
 				if use_cubes == 1:
 					robot.world.connect_to_cubes()
+			msg = 'state 2 checkpoint'
 			robot_print_current_state('state 2 - charged')
 			robot.set_needs_levels(repair_value=1, energy_value=1, play_value=1)
 			# robot.drive_off_charger_contacts().wait_for_completed()
@@ -268,6 +271,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 		if (robot.battery_voltage <= lowbatvoltage) and (robot.is_on_charger == 0) and cozmostate != 5 and cozmostate != 6  and cozmostate !=98 and cozmostate != 1 and cozmostate != 2:
 			lowbatcount += 1
 			robot_set_needslevel()
+			msg = 'state 3 checkpoint'
 			robot_print_current_state('state 3 - low battery threshold breach %s' % str(lowbatcount))
 			robot_reaction_chance(cozmo.anim.Triggers.CodeLabTakaTaka,1,False,False,False)
 			# print("Event log      : %s" % str(msg))
@@ -277,6 +281,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 			if use_cubes == 1:
 				robot.world.disconnect_from_cubes()
 			robot_set_needslevel()
+			msg = 'state 3 exit'
 			robot_print_current_state('state 3 - low battery - switching to state 5')
 			if cozmostate != 1 and cozmostate != 6:
 				cozmostate = 5
@@ -285,6 +290,7 @@ def cozmo_unleashed(robot: cozmo.robot.Robot):
 #
 		if (robot.battery_voltage > lowbatvoltage) and (robot.is_on_charger == 0) and cozmostate != 9 and cozmostate != 5 and cozmostate != 6 and cozmostate != 3 and lowbatcount < 3 and cozmostate != 99  and cozmostate !=98:
 			if cozmostate != 4: # 4 is freeplay
+				msg = 'state 4 checkpoint'
 				robot_print_current_state('freeplay - switching to state 4')
 				cozmostate = 4
 				if freeplay == 0:
@@ -632,10 +638,10 @@ def robot_set_needslevel():
 def robot_check_sleep_snoring():
 	global robot
 	i = random.randint(1, 1000)
-	if i >= 997 and cozmostate == 1:
+	if i >= 997 and cozmostate == 1 and not robot.is_animating:
 		robot_print_current_state('check complete - snore')
 		#robot.play_anim_trigger(Sleeping).wait_for_completed()
-		robot_reaction_chance(cozmo.anim.Triggers.Sleeping,1,True,False,True)
+		robot_reaction_chance(cozmo.anim.Triggers.Sleeping,100,True,False,True)
 	else:
 		#robot_print_current_state('check complete - no snore')
 		time.sleep(0.5)
@@ -936,7 +942,7 @@ def robot_drive_random_pattern():
 			break
 		# drive to a random point and orientation
 		counter=0
-		while counter < 3 and cozmostate ==5 and cozmostate !=6:
+		while counter < 1 and cozmostate ==5 and cozmostate !=6:
 			if cozmostate == 6 or cozmostate ==1 or cozmostate == 2:
 				robot_print_current_state('breaking out of drive loop')
 				loops=0
@@ -1150,11 +1156,17 @@ def robot_start_docking():
 		charger = robot.world.charger
 		robot_reaction_chance(cozmo.anim.Triggers.FeedingReactToShake_Normal,85,True,False,False)
 		robot_print_current_state('docking')
-		robot.turn_in_place(degrees(95)).wait_for_completed()
-		robot.turn_in_place(degrees(95)).wait_for_completed()
+		try:
+			robot.turn_in_place(degrees(95)).wait_for_completed()
+			robot.turn_in_place(degrees(95)).wait_for_completed()
+		except:
+			robot_print_current_state('failed to do a 180')
 		time.sleep(0.5)
 		robot_reaction_chance(cozmo.anim.Triggers.CubePounceFake,1,True,False,False)
-		robot.drive_straight(distance_mm(-145), speed_mmps(150)).wait_for_completed()
+		try:
+			robot.drive_straight(distance_mm(-147), speed_mmps(150)).wait_for_completed()
+		except:
+			robot_print_current_state('failed to drive onto charger')
 		time.sleep(0.5)
 		# check if we're now docked
 		if robot.is_on_charger:
@@ -1290,6 +1302,7 @@ class CheckState (threading.Thread):
 		is_localized = False
 		is_picking_or_placing = False
 		is_pathing = False
+		is_behavior_running = False
 		while thread_running:
 			
 # event monitor: robot is picked up detection
@@ -1490,7 +1503,20 @@ class CheckState (threading.Thread):
 					msg = 'cozmo.robot.Robot.is_pathing: False'
 					robot_print_current_state('Robot.is_pathing: False')
 					#print(msg)	
-				
+
+# event monitor (behavior is running)
+			if robot.is_behavior_running:
+				if not is_behavior_running:
+					is_behavior_running = True
+					msg = 'cozmo.robot.Robot.is_behavior_running: True'
+					robot_print_current_state('Robot.is_behavior_running: True')
+			elif not robot.is_behavior_running:
+				if is_behavior_running:
+					is_behavior_running = False
+					msg = 'cozmo.robot.Robot.is_behavior_running: False'
+					robot_print_current_state('Robot.is_behavior_running: False')
+
+		
 # event monitor: robot is moving
 # too spammy/unreliable
 
@@ -1556,6 +1582,7 @@ def monitor_EvtUnexpectedMovement(evt, **kwargs):
 		robot_print_current_state('unexpected behavior during action; aborting')
 		#print("unexpected behavior during action; aborting")
 		robot.abort_all_actions(log_abort_messages=True)
+		robot.stop_all_motors()
 		robot.wait_for_all_actions_completed()
 		#print("unexpected behavior during action; aborting")
 		robot_print_current_state('unexpected behavior during action; aborting')
@@ -1689,21 +1716,21 @@ def robot_print_current_state(currentstate):
 		batcounter = 0
 	batcounter += 1
 	robot_set_needslevel()
+	currentbehavior = robot.current_behavior
+	if currentbehavior == None and cozmostate == 4:
+		currentbehavior = 'freeplay'
 	runtime = round(((time.time() - start_time)/60),2)
 	"{:.2f}".format(runtime)
 	if debugging==1:
-		print("istate %s" % cozmostate,"| battery %s" % str(round(robot.battery_voltage, 2)),"| energy %s" % round(needslevel, 2),"| anim %s" % str(robot.is_animating),"| behav %s" % str(robot.is_behavior_running),"| bkpk %s" % lightstate,"| state: %s" % str(currentstate),"| msg: %s" % str(msg))
 		#logging.warn('istate %s' % cozmostate,'| battery %s' % str(round(robot.battery_voltage, 2)),'| energy %s' % round(needslevel, 2),'| anim %s' % str(robot.is_animating),'| behav %s' % str(robot.is_behavior_running),'| bkpk %s' % lightstate,'| state: %s' % str(currentstate),'| msg: %s' % str(msg))
+		#print("state %s" % cozmostate,"| battery %s" % str(round(robot.battery_voltage, 2)),"| energy %s" % round(needslevel, 2),"| anim %s" % str(robot.is_animating),"| behav %s" % str(robot.is_behavior_running),"| bkpk %s" % lightstate,"| action: %s" % str(currentstate),"| msg: %s" % str(msg),"accel: %s" % str(robot.accelerometer))
+		print("state %s" % cozmostate,"| battery %s" % str(round(robot.battery_voltage, 2)),"| energy %s" % round(needslevel, 2),"| anim %s" % str(robot.is_animating),"| behav %s" % str(robot.is_behavior_running),"| bkpk %s" % lightstate,"| action: %s" % str(currentstate),"| msg: %s" % str(msg),"curbehav: %s" % str(currentbehavior))
+		
 	else:
 		os.system('cls' if os.name == 'nt' else 'clear')
-		print("State          : %s" % str(currentstate))
-		print("Internal state : %s" % str(cozmostate))
-		print("Battery        : %s" % (str(round(robot.battery_voltage, 2))))
-		print("Energy         : %s" % (round(needslevel, 2)))
-		print("Runtime        : %s" % str(runtime))
-		print("running behav  : %s" % (str(robot.is_behavior_running)))
-		print("animating      : %s" % (str(robot.is_animating)))
-		print("Event log      : %s" % str(msg))
+		#
+		# commented out thingies either didn't do what I expected or didn't work
+		#
 		#print("cozmo sees     : %s"  % str(robot.world.connected_light_cubes))
 		#print("wheelie        : %s" % str(robot.PopAWheelie))
 		#print("Cubes connected: %s" % robot.world.World.active_behavior.connected_light_cubes)
@@ -1712,10 +1739,19 @@ def robot_print_current_state(currentstate):
 		#print("Max off charger: %s" % str(round(highbatvoltage, 2))) 
 		#print("idle anim      : %s" % str(robot.is_animating_idle))
 		#print("actions        : %s" % str(robot.has_in_progress_actions))
-		print("Lightstate     : %s" % str(lightstate))
 		# print("Object log     : %s" %objmsg)
 		# print("Face log       : %s" %facemsg)
 		# print("Behavior log   : %s" %bhvmsg)
+		print("State          : %s" % str(currentstate))
+		print("Internal state : %s" % str(cozmostate))
+		print("Battery        : %s" % (str(round(robot.battery_voltage, 2))))
+		print("Energy         : %s" % (round(needslevel, 2)))
+		print("Runtime        : %s" % str(runtime))
+		print("running behav  : %s" % (str(robot.is_behavior_running)))
+		print("animating      : %s" % (str(robot.is_animating)))
+		print("Event log      : %s" % str(msg))
+		print("Lightstate     : %s" % str(lightstate))
+
 	
 #
 # END OF EVENT MONITOR FUNCTIONS
